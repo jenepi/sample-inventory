@@ -209,7 +209,7 @@
       const status = document.getElementById('status').value || null;
 
       // Call the RPC. (It’s a view underneath with status/remaining filters.)
-      const { data, error } = await client.rpc(RPC_FUNCTION, {
+      const { data, error } = await client.rpc("search_samples", {
         p_core_id: coreId,
         p_min_depth: minDepth,
         p_max_depth: maxDepth,
