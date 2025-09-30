@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>COLDEX Sample Finder</title>
+  <style>
+    :root { --gap: 10px; --pad: 12px; --radius: 12px; }
+    body { font: 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#0b1020; color:#eef2ff;}
+    .wrap { max-width: 1150px; margin: 0 auto; padding: 28px; }
+    h1 { font-size: 22px; margin: 0 0 18px; }
+    .card { background:#121936; border:1px solid #1e2752; border-radius: var(--radius); padding: var(--pad); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    .grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: var(--gap); }
+    .grid > div { display:flex; flex-direction:column; }
+    label { font-size: 12px; color:#aab4ff; margin-bottom:6px; letter-spacing:.2px;}
+    input, select, button { border-radius: 10px; border:1px solid #2b356e; background:#0f1530; color:#eef2ff; padding: 10px 12px; }
+    input::placeholder { color:#7f89c9; }
+    .actions { display:flex; gap: var(--gap); align-items:center; }
+    .btn { cursor:pointer; font-weight:600; }
+    .btn-primary { background:#335bff; border-color:#335bff; }
+    .btn-ghost { background:transparent; }
+    .muted { color:#aab4ff; font-size: 13px; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding: 10px 12px; border-bottom:1px solid #1d254e; vertical-align: top; }
+    th { position: sticky; top: 0; background:#121936; z-index: 1; }
+    .table-wrap { overflow:auto; max-height: 70vh; border-radius: 10px; border:1px solid #1e2752; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #2b356e; font-size:12px; color:#cbd3ff; background:#0f1530; }
+    .foot { display:flex; justify-content: space-between; align-items:center; margin-top: var(--gap); }
+    .error { background:#2c1220; border:1px solid #a13357; color:#ffd4df; padding:10px 12px; border-radius:10px; margin-top:10px; display:none;}
+    .ok { display:none; }
+    .sr { position:absolute; left:-9999px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>COLDEX Sample Finder</h1>
+
+    <div class="card" style="margin-bottom:16px;">
+      <form id="searchForm">
+        <div class="grid">
+          <div>
+            <label for="coreId">Core ID (prefix ok)</label>
+            <input id="coreId" name="coreId" placeholder="e.g., ALHIC1903" />
+          </div>
+          <div>
+            <label for="minDepth">Min depth (m)</label>
+            <input id="minDepth" name="minDepth" type="number" step="0.01" placeholder="e.g., 60" />
+          </div>
+          <div>
+            <label for="maxDepth">Max depth (m)</label>
+            <input id="maxDepth" name="maxDepth" type="number" step="0.01" placeholder="e.g., 90" />
+          </div>
+          <div>
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              <option value="available" selected>available</option>
+              <option value="">(ignore)</option>
+              <option value="consumed">consumed</option>
+            </select>
+          </div>
+          <div class="actions" style="align-self:end;">
+            <button id="runBtn" class="btn btn-primary" type="submit">Search</button>
+            <button id="resetBtn" class="btn btn-ghost" type="button">Reset</button>
+          </div>
+          <div class="actions" style="align-self:end; justify-content:flex-end;">
+            <button id="csvBtn" class="btn btn-ghost" type="button" title="Download CSV">Download CSV</button>
+          </div>
+        </div>
+        <div id="err" class="error"></div>
+      </form>
+      <div class="foot">
+        <div id="count" class="muted">0 results</div>
+        <div class="muted">Depth filters include any sample overlapping the window.</div>
+      </div>
+    </div>
+
+    <div class="table-wrap card">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Record ID</th>
+            <th>Core ID</th>
+            <th>Section #</th>
+            <th>Top (m)</th>
+            <th>Bottom (m)</th>
+            <th>Length (cm)</th>
+            <th>Remaining (cm)</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"><tr><td colspan="9" class="muted">Run a search…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Supabase JS (UMD build) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script>
+    // === 1) CONFIG: put your project details here ============================
+    const SUPABASE_URL = 'https://https://qkmxlmpotcsfxroxbnir.supabase.co';          // <- change me
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFrbXhsbXBvdGNzZnhyb3hibmlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2NjUwMjUsImV4cCI6MjA3NDI0MTAyNX0.v3_MMFUjsGZUd5qgUX0k31xCz0Syi9syEnY_C-QZouU';                 // <- change me
+    const SCHEMA = 'coldex';                                          // adjust if needed
+    const RPC_FUNCTION = 'search_samples';                            // from earlier step
+    // ========================================================================
+
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      db: { schema: SCHEMA }
+    });
+
+    const form = document.getElementById('searchForm');
+    const runBtn = document.getElementById('runBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const csvBtn = document.getElementById('csvBtn');
+    const tbody = document.getElementById('tbody');
+    const countEl = document.getElementById('count');
+    const errEl = document.getElementById('err');
+
+    let lastResults = [];
+
+    function showError(msg) {
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    }
+    function clearError() {
+      errEl.textContent = '';
+      errEl.style.display = 'none';
+    }
+
+    function numberOrNull(v) {
+      if (v === '' || v === null || v === undefined) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function renderRows(rows) {
+      tbody.innerHTML = '';
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td class="muted" colspan="9">No results.</td></tr>';
+        return;
+      }
+      const esc = (s) => (s ?? '').toString()
+        .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><code class="pill">${esc(r.record_id)}</code></td>
+          <td>${esc(r.core_id)}</td>
+          <td>${esc(r.section_number)}</td>
+          <td>${r.top_depth_m ?? ''}</td>
+          <td>${r.bottom_depth_m ?? ''}</td>
+          <td>${r.length_cm ?? ''}</td>
+          <td>${r.remaining_cm ?? ''}</td>
+          <td>${esc(r.status ?? 'available')}</td>
+          <td>${esc(r.notes ?? '')}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function toCSV(rows) {
+      const cols = [
+        'record_id','core_id','section_number','top_depth_m','bottom_depth_m',
+        'length_cm','remaining_cm','status','notes'
+      ];
+      const header = cols.join(',');
+      const lines = rows.map(r =>
+        cols.map(c => {
+          let v = r[c];
+          if (v === null || v === undefined) v = '';
+          v = String(v);
+          // quote if needed
+          return /[",\n]/.test(v) ? `"${v.replaceAll('"','""')}"` : v;
+        }).join(',')
+      );
+      return [header, ...lines].join('\n');
+    }
+
+    function downloadCSV(rows) {
+      if (!rows || rows.length === 0) return;
+      const blob = new Blob([toCSV(rows)], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'coldex_available_samples.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // Depth overlap helper (client-side filter if you want stricter semantics)
+    function overlaps(row, min, max) {
+      if (min == null && max == null) return true;
+      const top = Number(row.top_depth_m);
+      const bot = Number(row.bottom_depth_m);
+      if (!Number.isFinite(top) || !Number.isFinite(bot)) return false;
+      if (min != null && bot < min) return false;    // sample entirely above window
+      if (max != null && top > max) return false;    // sample entirely below window
+      return true; // otherwise overlaps
+    }
+
+    async function runSearch(ev) {
+      ev?.preventDefault();
+      clearError();
+      runBtn.disabled = true; runBtn.textContent = 'Searching…';
+
+      const coreId = document.getElementById('coreId').value.trim() || null;
+      const minDepth = numberOrNull(document.getElementById('minDepth').value);
+      const maxDepth = numberOrNull(document.getElementById('maxDepth').value);
+      const status = document.getElementById('status').value || null;
+
+      // Call the RPC. (It’s a view underneath with status/remaining filters.)
+      const { data, error } = await client.rpc(RPC_FUNCTION, {
+        p_core_id: coreId,
+        p_min_depth: minDepth,
+        p_max_depth: maxDepth,
+        p_status: status
+      });
+
+      runBtn.disabled = false; runBtn.textContent = 'Search';
+
+      if (error) {
+        showError(error.message || 'Unknown error');
+        console.error(error);
+        return;
+      }
+
+      // Optional: client-side “overlap” check for clarity
+      const filtered = Array.isArray(data)
+        ? data.filter(r => overlaps(r, minDepth, maxDepth))
+        : [];
+
+      lastResults = filtered;
+      countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
+      renderRows(filtered);
+    }
+
+    form.addEventListener('submit', runSearch);
+    resetBtn.addEventListener('click', () => {
+      form.reset(); clearError();
+      lastResults = []; renderRows([]); countEl.textContent = '0 results';
+    });
+    csvBtn.addEventListener('click', () => downloadCSV(lastResults));
+  </script>
+</body>
+</html>
