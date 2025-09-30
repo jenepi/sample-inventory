@@ -199,48 +199,57 @@
     }
 
     async function runSearch(ev) {
-      ev?.preventDefault();
-      clearError();
-      runBtn.disabled = true; runBtn.textContent = 'Searching…';
+  ev?.preventDefault();
+  clearError();
+  runBtn.disabled = true; 
+  runBtn.textContent = 'Searching…';
 
-      const coreId = document.getElementById('coreId').value.trim() || null;
-      const minDepth = numberOrNull(document.getElementById('minDepth').value);
-      const maxDepth = numberOrNull(document.getElementById('maxDepth').value);
-      const status = document.getElementById('status').value || null;
+  function toNullOrText(v) {
+    const x = (v ?? '').trim();
+    return x === '' ? null : x;
+  }
 
-      console.log({
-  coreId,
-  minDepth,
-  maxDepth,
-  status
-});
+  function toNullOrNumber(v) {
+    const x = (v ?? '').trim();
+    if (x === '') return null;
+    const n = Number(x);
+    return Number.isFinite(n) ? n : null;
+  }
 
+  const coreId      = toNullOrText(document.getElementById('coreId').value);
+  const minDepth    = toNullOrNumber(document.getElementById('minDepth').value);
+  const maxDepth    = toNullOrNumber(document.getElementById('maxDepth').value);
+  const rawStatus   = document.getElementById('status').value.trim();
+  const status      = rawStatus === '' ? null : rawStatus;
 
-      // Call the RPC. (It’s a view underneath with status/remaining filters.)
-      const { data, error } = await client.rpc(RPC_FUNCTION, {
-        p_core_id: coreId,
-        p_min_depth: minDepth,
-        p_max_depth: maxDepth,
-        p_status: status
-      });
+  console.log({ coreId, minDepth, maxDepth, status }); // 🔍 debug log
 
-      runBtn.disabled = false; runBtn.textContent = 'Search';
+  const { data, error } = await client.rpc(RPC_FUNCTION, {
+    p_core_id: coreId,
+    p_min_depth: minDepth,
+    p_max_depth: maxDepth,
+    p_status: status
+  });
 
-      if (error) {
-        showError(error.message || 'Unknown error');
-        console.error(error);
-        return;
-      }
+  runBtn.disabled = false; 
+  runBtn.textContent = 'Search';
 
-      // Optional: client-side “overlap” check for clarity
-      const filtered = Array.isArray(data)
-        ? data.filter(r => overlaps(r, minDepth, maxDepth))
-        : [];
+  if (error) {
+    showError(error.message || 'Unknown error');
+    console.error(error);
+    return;
+  }
 
-      lastResults = filtered;
-      countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
-      renderRows(filtered);
-    }
+  // Optional overlap filter (depends on your preference)
+  const filtered = Array.isArray(data)
+    ? data.filter(r => overlaps(r, minDepth, maxDepth))
+    : [];
+
+  lastResults = filtered;
+  countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
+  renderRows(filtered);
+}
+
 
     form.addEventListener('submit', runSearch);
     resetBtn.addEventListener('click', () => {
