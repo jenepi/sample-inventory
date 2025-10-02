@@ -98,347 +98,279 @@
   <!-- Supabase JS (UMD build) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script>
-    // === 1) CONFIG: put your project details here ============================
-    const SUPABASE_URL = 'https://qkmxlmpotcsfxroxbnir.supabase.co';          // <- change me
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFrbXhsbXBvdGNzZnhyb3hibmlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2NjUwMjUsImV4cCI6MjA3NDI0MTAyNX0.v3_MMFUjsGZUd5qgUX0k31xCz0Syi9syEnY_C-QZouU';                 // <- change me
-    const RPC_FUNCTION = 'search_samples';                            // from earlier step
-    // ========================================================================
+  // === 1) CONFIG ===========================================================
+  const SUPABASE_URL = 'https://qkmxlmpotcsfxroxbnir.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFrbXhsbXBvdGNzZnhyb3hibmlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2NjUwMjUsImV4cCI6MjA3NDI0MTAyNX0.v3_MMFUjsGZUd5qgUX0k31xCz0Syi9syEnY_C-QZouU';
+  const RPC_FUNCTION = 'search_samples';
+  // ========================================================================
 
-    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const client   = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const form     = document.getElementById('searchForm');
+  const runBtn   = document.getElementById('runBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const csvBtn   = document.getElementById('csvBtn');
+  const tbody    = document.getElementById('tbody');
+  const countEl  = document.getElementById('count');
+  const errEl    = document.getElementById('err');
 
-    const form = document.getElementById('searchForm');
-    const runBtn = document.getElementById('runBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const csvBtn = document.getElementById('csvBtn');
-    const tbody = document.getElementById('tbody');
-    const countEl = document.getElementById('count');
-    const errEl = document.getElementById('err');
+  let lastResults = [];
 
-    let lastResults = [];
-
-    function showError(msg) {
-      errEl.textContent = msg;
-      errEl.style.display = 'block';
-    }
-    function clearError() {
-      errEl.textContent = '';
-      errEl.style.display = 'none';
-    }
-
-    function numberOrNull(v) {
-      if (v === '' || v === null || v === undefined) return null;
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
-    }
-
-function renderRows(rows) {
-  tbody.innerHTML = '';
-  if (!rows || rows.length === 0) {
-    tbody.innerHTML = '<tr><td class="muted" colspan="10">No results.</td></tr>';
-    return;
+  function showError(msg) {
+    errEl.textContent = msg;
+    errEl.style.display = 'block';
   }
-  const esc = (s) => (s ?? '').toString()
-    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-
-  for (const r of rows) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>
-  <button class="pill" data-record-id="${esc(r.record_id)}"
-          style="cursor:pointer; background:none; border:1px solid #2b356e;">
-    ${esc(r.record_id)}
-  </button>
-</td>
-      <td>${esc(r.core_id)}</td>
-      <td>${esc(r.section_number)}</td>
-      <td>${r.top_depth_m ?? ''}</td>
-      <td>${r.bottom_depth_m ?? ''}</td>
-      <td>${r.length_m ?? ''}</td>
-      <td>${r.remaining_m ?? ''}</td>
-      <td>${r.has_subsamples ? 'Yes' : 'No'}</td>
-      <td>${esc(r.status ?? '')}</td>
-      <td>${esc(r.notes ?? '')}</td>
-    `;
-    tbody.appendChild(tr);
+  function clearError() {
+    errEl.textContent = '';
+    errEl.style.display = 'none';
   }
-}
-
-    function toCSV(rows) {
-      const cols = [
-        'record_id','core_id','section_number','top_depth_m','bottom_depth_m',
-        'length_m','remaining_m','has_subsamples','subsample_count','status','notes'
-      ];
-      const header = cols.join(',');
-      const lines = rows.map(r =>
-        cols.map(c => {
-          let v = r[c];
-          if (v === null || v === undefined) v = '';
-          v = String(v);
-          // quote if needed
-          return /[",\n]/.test(v) ? `"${v.replaceAll('"','""')}"` : v;
-        }).join(',')
-      );
-      return [header, ...lines].join('\n');
-    }
-
-    function downloadCSV(rows) {
-      if (!rows || rows.length === 0) return;
-      const blob = new Blob([toCSV(rows)], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'coldex_available_samples.csv';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    // Depth overlap helper (client-side filter if you want stricter semantics)
-    function overlaps(row, min, max) {
-      if (min == null && max == null) return true;
-      const top = Number(row.top_depth_m);
-      const bot = Number(row.bottom_depth_m);
-      if (!Number.isFinite(top) || !Number.isFinite(bot)) return false;
-      if (min != null && bot < min) return false;    // sample entirely above window
-      if (max != null && top > max) return false;    // sample entirely below window
-      return true; // otherwise overlaps
-    }
-
-    async function runSearch(ev) {
-  ev?.preventDefault();
-  clearError();
-  runBtn.disabled = true; 
-  runBtn.textContent = 'Searching…';
-
-  function toNullOrText(v) {
-    const x = (v ?? '').trim();
-    return x === '' ? null : x;
-  }
-
-  function toNullOrNumber(v) {
-    const x = (v ?? '').trim();
-    if (x === '') return null;
-    const n = Number(x);
+  function numberOrNull(v) {
+    if (v === '' || v === null || v === undefined) return null;
+    const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
 
-  const coreId      = toNullOrText(document.getElementById('coreId').value);
-  const minDepth    = toNullOrNumber(document.getElementById('minDepth').value);
-  const maxDepth    = toNullOrNumber(document.getElementById('maxDepth').value);
-  const rawStatus   = document.getElementById('status').value.trim();
-  const status      = rawStatus === '' ? null : rawStatus;
+  function renderRows(rows) {
+    tbody.innerHTML = '';
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td class="muted" colspan="10">No results.</td></tr>';
+      return;
+    }
+    const esc = (s) => (s ?? '').toString()
+      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 
-  console.log({ coreId, minDepth, maxDepth, status }); // 🔍 debug log
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <button class="pill" data-record-id="${esc(r.record_id)}"
+                  style="cursor:pointer; background:none; border:1px solid #2b356e;">
+            ${esc(r.record_id)}
+          </button>
+        </td>
+        <td>${esc(r.core_id)}</td>
+        <td>${esc(r.section_number)}</td>
+        <td>${r.top_depth_m ?? ''}</td>
+        <td>${r.bottom_depth_m ?? ''}</td>
+        <td>${r.length_m ?? ''}</td>
+        <td>${r.remaining_m ?? ''}</td>
+        <td>${r.has_subsamples ? 'Yes' : 'No'}</td>
+        <td>${esc(r.status ?? '')}</td>
+        <td>${esc(r.notes ?? '')}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
 
-  const { data, error } = await client.rpc(RPC_FUNCTION, {
-    p_core_id: coreId,
-    p_min_depth: minDepth,
-    p_max_depth: maxDepth,
-    p_status: status
+  function toCSV(rows) {
+    const cols = [
+      'record_id','core_id','section_number','top_depth_m','bottom_depth_m',
+      'length_m','remaining_m','has_subsamples','subsample_count','status','notes'
+    ];
+    const header = cols.join(',');
+    const lines = rows.map(r =>
+      cols.map(c => {
+        let v = r[c];
+        if (v === null || v === undefined) v = '';
+        v = String(v);
+        return /[",\n]/.test(v) ? `"${v.replaceAll('"','""')}"` : v;
+      }).join(',')
+    );
+    return [header, ...lines].join('\n');
+  }
+
+  function downloadCSV(rows) {
+    if (!rows || rows.length === 0) return;
+    const blob = new Blob([toCSV(rows)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'coldex_available_samples.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // Depth overlap helper (client-side)
+  function overlaps(row, min, max) {
+    if (min == null && max == null) return true;
+    const top = Number(row.top_depth_m);
+    const bot = Number(row.bottom_depth_m);
+    if (!Number.isFinite(top) || !Number.isFinite(bot)) return false;
+    if (min != null && bot < min) return false;
+    if (max != null && top > max) return false;
+    return true;
+  }
+
+  async function runSearch(ev) {
+    ev?.preventDefault();
+    clearError();
+    runBtn.disabled = true;
+    runBtn.textContent = 'Searching…';
+
+    function toNullOrText(v) {
+      const x = (v ?? '').trim();
+      return x === '' ? null : x;
+    }
+    function toNullOrNumber(v) {
+      const x = (v ?? '').trim();
+      if (x === '') return null;
+      const n = Number(x);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    const coreId   = toNullOrText(document.getElementById('coreId').value);
+    const minDepth = toNullOrNumber(document.getElementById('minDepth').value);
+    const maxDepth = toNullOrNumber(document.getElementById('maxDepth').value);
+
+    // IMPORTANT: default Status select is "available".
+    // If you want "ignore" by default, change the HTML default or force-null here.
+    const rawStatus = document.getElementById('status').value.trim();
+    const status    = rawStatus === '' ? null : rawStatus;
+
+    console.log({ coreId, minDepth, maxDepth, status });
+
+    const { data, error } = await client.rpc(RPC_FUNCTION, {
+      p_core_id:   coreId,
+      p_min_depth: minDepth,
+      p_max_depth: maxDepth,
+      p_status:    status
+    });
+
+    runBtn.disabled = false;
+    runBtn.textContent = 'Search';
+
+    if (error) {
+      showError(error.message || 'Unknown error');
+      console.error(error);
+      return;
+    }
+
+    const filtered = Array.isArray(data)
+      ? data.filter(r => overlaps(r, minDepth, maxDepth))
+      : [];
+
+    lastResults = filtered;
+    countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
+    renderRows(filtered);
+  }
+
+  form.addEventListener('submit', runSearch);
+  resetBtn.addEventListener('click', () => {
+    form.reset(); clearError();
+    lastResults = []; renderRows([]); countEl.textContent = '0 results';
+  });
+  csvBtn.addEventListener('click', () => downloadCSV(lastResults));
+
+  // ---------- Order-proof modal wiring ----------
+  function $id(id){ return document.getElementById(id); }
+  function openDetail(){ const m=$id('detailModal'); if (m) m.style.display='flex'; }
+  function closeDetail(){ const m=$id('detailModal'); if (m) m.style.display='none'; }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const modal   = $id('detailModal');
+    const closeBn = $id('detailClose');
+    if (modal)   modal.addEventListener('click', (e) => { if (e.target === modal) closeDetail(); });
+    if (closeBn) closeBn.addEventListener('click', closeDetail);
   });
 
-  runBtn.disabled = false; 
-  runBtn.textContent = 'Search';
+  // Delegate Record-ID clicks from the results table
+  tbody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-record-id]');
+    if (!btn) return;
+    const recordId = btn.getAttribute('data-record-id');
+    await showSampleDetail(recordId);
+  });
 
-  if (error) {
-    showError(error.message || 'Unknown error');
-    console.error(error);
-    return;
+  // global esc helper for modal rendering
+  function esc(s) {
+    return (s ?? '').toString()
+      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
   }
 
-  // Optional overlap filter (depends on your preference)
-  const filtered = Array.isArray(data)
-    ? data.filter(r => overlaps(r, minDepth, maxDepth))
-    : [];
+  async function showSampleDetail(recordId) {
+    const title = $id('detailTitle');
+    const body  = $id('detailBody');
+    if (title) title.textContent = `Sample ${recordId}`;
+    if (body)  body.innerHTML = 'Loading…';
+    openDetail();
 
-  lastResults = filtered;
-  countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
-  renderRows(filtered);
-}
+    const { data, error } = await client.rpc('get_sample_detail', { p_record_id: recordId });
+    if (error) {
+      console.error(error);
+      if (body) body.innerHTML = `<div class="error" style="display:block">Error: ${esc(error.message)}</div>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      if (body) body.innerHTML = `<div class="muted">No detail found.</div>`;
+      return;
+    }
 
+    const row  = data[0];
+    const subs = Array.isArray(row.subsamples) ? row.subsamples : [];
 
-    form.addEventListener('submit', runSearch);
-    resetBtn.addEventListener('click', () => {
-      form.reset(); clearError();
-      lastResults = []; renderRows([]); countEl.textContent = '0 results';
-    });
-    csvBtn.addEventListener('click', () => downloadCSV(lastResults));
-    // Detail modal elements
-const detailModal = document.getElementById('detailModal');
-const detailClose = document.getElementById('detailClose');
-const detailBody  = document.getElementById('detailBody');
-const detailTitle = document.getElementById('detailTitle');
-
-function openDetail() { detailModal.style.display = 'flex'; }
-function closeDetail() { detailModal.style.display = 'none'; }
-detailClose.addEventListener('click', closeDetail);
-detailModal.addEventListener('click', (e) => { if (e.target === detailModal) closeDetail(); });
-
-// Delegate clicks from the table body
-tbody.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-record-id]');
-  if (!btn) return;
-  const recordId = btn.getAttribute('data-record-id');
-  await showSampleDetail(recordId);
-});
-
-async function showSampleDetail(recordId) {
-  detailTitle.textContent = `Sample ${recordId}`;
-  detailBody.innerHTML = 'Loading…';
-  openDetail();
-
-  // Call the detail RPC
-  const { data, error } = await client.rpc('get_sample_detail', { p_record_id: recordId });
-  if (error) {
-    console.error(error);
-    detailBody.innerHTML = `<div class="error" style="display:block">Error: ${error.message}</div>`;
-    return;
-  }
-  if (!data || data.length === 0) {
-    detailBody.innerHTML = `<div class="muted">No detail found.</div>`;
-    return;
-  }
-
-  const row = data[0];
-  const subs = Array.isArray(row.subsamples) ? row.subsamples : [];
-
-  // Render a tidy card
-  detailBody.innerHTML = `
-    <div style="display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px;">
-      <div class="card">
-        <h3 style="margin-top:0;">Sample</h3>
-        <table>
-          <tr><th style="width:160px;">Record ID</th><td><code class="pill">${sanitize(recordId)}</code></td></tr>
-          <tr><th>Core ID</th><td>${sanitize(row.core_id)}</td></tr>
-          <tr><th>Section #</th><td>${sanitize(row.section_number)}</td></tr>
-          <tr><th>Top (m)</th><td>${row.top_depth_m ?? ''}</td></tr>
-          <tr><th>Bottom (m)</th><td>${row.bottom_depth_m ?? ''}</td></tr>
-          <tr><th>Length (m)</th><td>${row.length_m ?? ''}</td></tr>
-          <tr><th>Remaining (m)</th><td>${row.remaining_m ?? ''}</td></tr>
-          <tr><th>Status</th><td>${sanitize(row.status ?? '')}</td></tr>
-          <tr><th>Notes</th><td>${sanitize(row.notes ?? '')}</td></tr>
-        </table>
-      </div>
-      <div class="card">
-        <h3 style="margin-top:0;">Subsamples <span class="pill">${row.subsample_count ?? 0}</span></h3>
-        ${subs.length === 0 ? '<div class="muted">None</div>' : `
-          <div class="table-wrap" style="max-height:50vh;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Subsample ID</th>
-// --- Order-proof modal wiring (works regardless of where HTML sits) ---
-function $id(id){ return document.getElementById(id); }
-function openDetail(){ const m=$id('detailModal'); if (m) m.style.display='flex'; }
-function closeDetail(){ const m=$id('detailModal'); if (m) m.style.display='none'; }
-
-// Wire close handlers once DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  const modal   = $id('detailModal');
-  const closeBn = $id('detailClose');
-  if (modal)   modal.addEventListener('click', (e) => { if (e.target === modal) closeDetail(); });
-  if (closeBn) closeBn.addEventListener('click', closeDetail);
-});
-
-// Delegate Record-ID clicks from the results table
-tbody.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-record-id]');
-  if (!btn) return;
-  const recordId = btn.getAttribute('data-record-id');
-  await showSampleDetail(recordId);
-});
-
-async function showSampleDetail(recordId) {
-  const title = $id('detailTitle');
-  const body  = $id('detailBody');
-  if (title) title.textContent = `Sample ${recordId}`;
-  if (body)  body.innerHTML = 'Loading…';
-  openDetail();
-
-  // Call public wrapper
-  const { data, error } = await client.rpc('get_sample_detail', { p_record_id: recordId });
-  if (error) {
-    console.error(error);
-    if (body) body.innerHTML = `<div class="error" style="display:block">Error: ${error.message}</div>`;
-    return;
-  }
-  if (!data || data.length === 0) {
-    if (body) body.innerHTML = `<div class="muted">No detail found.</div>`;
-    return;
-  }
-
-  const row  = data[0];
-  const subs = Array.isArray(row.subsamples) ? row.subsamples : [];
-
-  if (body) body.innerHTML = `
-    <div style="display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px;">
-      <div class="card">
-        <h3 style="margin-top:0;">Sample</h3>
-        <table>
-          <tr><th style="width:160px;">Record ID</th><td><code class="pill">${esc(recordId)}</code></td></tr>
-          <tr><th>Core ID</th><td>${esc(row.core_id)}</td></tr>
-          <tr><th>Section #</th><td>${esc(row.section_number)}</td></tr>
-          <tr><th>Top (m)</th><td>${row.top_depth_m ?? ''}</td></tr>
-          <tr><th>Bottom (m)</th><td>${row.bottom_depth_m ?? ''}</td></tr>
-          <tr><th>Length (m)</th><td>${row.length_m ?? ''}</td></tr>
-          <tr><th>Remaining (m)</th><td>${row.remaining_m ?? ''}</td></tr>
-          <tr><th>Status</th><td>${esc(row.status ?? '')}</td></tr>
-          <tr><th>Notes</th><td>${esc(row.notes ?? '')}</td></tr>
-        </table>
-      </div>
-      <div class="card">
-        <h3 style="margin-top:0;">Subsamples <span class="pill">${row.subsample_count ?? 0}</span></h3>
-        ${subs.length === 0 ? '<div class="muted">None</div>' : `
-          <div class="table-wrap" style="max-height:50vh;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Subsample ID</th>
-                  <th>Top (m)</th>
-                  <th>Bottom (m)</th>
-                  <th>Length (m)</th>
-                  <th>Status</th>
-                  <th>Destination</th>
-                  <th>Date sent</th>
-                  <th>Purpose</th>
-                  <th>Cut shape</th>
-                  <th>Shipment</th>
-                  <th>Request ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${subs.map(s => `
+    if (body) body.innerHTML = `
+      <div style="display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px;">
+        <div class="card">
+          <h3 style="margin-top:0;">Sample</h3>
+          <table>
+            <tr><th style="width:160px;">Record ID</th><td><code class="pill">${esc(recordId)}</code></td></tr>
+            <tr><th>Core ID</th><td>${esc(row.core_id)}</td></tr>
+            <tr><th>Section #</th><td>${esc(row.section_number)}</td></tr>
+            <tr><th>Top (m)</th><td>${row.top_depth_m ?? ''}</td></tr>
+            <tr><th>Bottom (m)</th><td>${row.bottom_depth_m ?? ''}</td></tr>
+            <tr><th>Length (m)</th><td>${row.length_m ?? ''}</td></tr>
+            <tr><th>Remaining (m)</th><td>${row.remaining_m ?? ''}</td></tr>
+            <tr><th>Status</th><td>${esc(row.status ?? '')}</td></tr>
+            <tr><th>Notes</th><td>${esc(row.notes ?? '')}</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">Subsamples <span class="pill">${row.subsample_count ?? 0}</span></h3>
+          ${subs.length === 0 ? '<div class="muted">None</div>' : `
+            <div class="table-wrap" style="max-height:50vh;">
+              <table>
+                <thead>
                   <tr>
-                    <td>${esc(s.subsample_id)}</td>
-                    <td>${s.top_depth_m ?? ''}</td>
-                    <td>${s.bottom_depth_m ?? ''}</td>
-                    <td>${s.length_m ?? ''}</td>
-                    <td>${esc(s.status ?? '')}</td>
-                    <td>${esc(s.destination ?? '')}</td>
-                    <td>${esc(s.date_sent ?? '')}</td>
-                    <td>${esc(s.purpose_notes ?? '')}</td>
-                    <td>${esc(s.cut_shape ?? '')}</td>
-                    <td>${esc(s.linked_shipment ?? '')}</td>
-                    <td>${esc(s.request_id ?? '')}</td>
+                    <th>Subsample ID</th>
+                    <th>Top (m)</th>
+                    <th>Bottom (m)</th>
+                    <th>Length (m)</th>
+                    <th>Status</th>
+                    <th>Destination</th>
+                    <th>Date sent</th>
+                    <th>Purpose</th>
+                    <th>Cut shape</th>
+                    <th>Shipment</th>
+                    <th>Request ID</th>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        `}
+                </thead>
+                <tbody>
+                  ${subs.map(s => `
+                    <tr>
+                      <td>${esc(s.subsample_id)}</td>
+                      <td>${s.top_depth_m ?? ''}</td>
+                      <td>${s.bottom_depth_m ?? ''}</td>
+                      <td>${s.length_m ?? ''}</td>
+                      <td>${esc(s.status ?? '')}</td>
+                      <td>${esc(s.destination ?? '')}</td>
+                      <td>${esc(s.date_sent ?? '')}</td>
+                      <td>${esc(s.purpose_notes ?? '')}</td>
+                      <td>${esc(s.cut_shape ?? '')}</td>
+                      <td>${esc(s.linked_shipment ?? '')}</td>
+                      <td>${esc(s.request_id ?? '')}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
       </div>
-    </div>
-  `;
-}
+    `;
+  }
+</script>
 
-// Reuse your existing tiny esc() from renderRows:
-function esc(s) {
-  return (s ?? '').toString()
-    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-}
-
-  </script>
   <div id="detailModal" style="position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:50;">
   <div id="detailCard" class="card" style="max-width:800px; width:95%; max-height:85vh; overflow:auto;">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
