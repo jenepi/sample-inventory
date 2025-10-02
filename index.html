@@ -328,6 +328,73 @@ async function showSampleDetail(recordId) {
               <thead>
                 <tr>
                   <th>Subsample ID</th>
+// --- Order-proof modal wiring (works regardless of where HTML sits) ---
+function $id(id){ return document.getElementById(id); }
+function openDetail(){ const m=$id('detailModal'); if (m) m.style.display='flex'; }
+function closeDetail(){ const m=$id('detailModal'); if (m) m.style.display='none'; }
+
+// Wire close handlers once DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  const modal   = $id('detailModal');
+  const closeBn = $id('detailClose');
+  if (modal)   modal.addEventListener('click', (e) => { if (e.target === modal) closeDetail(); });
+  if (closeBn) closeBn.addEventListener('click', closeDetail);
+});
+
+// Delegate Record-ID clicks from the results table
+tbody.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-record-id]');
+  if (!btn) return;
+  const recordId = btn.getAttribute('data-record-id');
+  await showSampleDetail(recordId);
+});
+
+async function showSampleDetail(recordId) {
+  const title = $id('detailTitle');
+  const body  = $id('detailBody');
+  if (title) title.textContent = `Sample ${recordId}`;
+  if (body)  body.innerHTML = 'Loading…';
+  openDetail();
+
+  // Call public wrapper
+  const { data, error } = await client.rpc('get_sample_detail', { p_record_id: recordId });
+  if (error) {
+    console.error(error);
+    if (body) body.innerHTML = `<div class="error" style="display:block">Error: ${error.message}</div>`;
+    return;
+  }
+  if (!data || data.length === 0) {
+    if (body) body.innerHTML = `<div class="muted">No detail found.</div>`;
+    return;
+  }
+
+  const row  = data[0];
+  const subs = Array.isArray(row.subsamples) ? row.subsamples : [];
+
+  if (body) body.innerHTML = `
+    <div style="display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px;">
+      <div class="card">
+        <h3 style="margin-top:0;">Sample</h3>
+        <table>
+          <tr><th style="width:160px;">Record ID</th><td><code class="pill">${esc(recordId)}</code></td></tr>
+          <tr><th>Core ID</th><td>${esc(row.core_id)}</td></tr>
+          <tr><th>Section #</th><td>${esc(row.section_number)}</td></tr>
+          <tr><th>Top (m)</th><td>${row.top_depth_m ?? ''}</td></tr>
+          <tr><th>Bottom (m)</th><td>${row.bottom_depth_m ?? ''}</td></tr>
+          <tr><th>Length (m)</th><td>${row.length_m ?? ''}</td></tr>
+          <tr><th>Remaining (m)</th><td>${row.remaining_m ?? ''}</td></tr>
+          <tr><th>Status</th><td>${esc(row.status ?? '')}</td></tr>
+          <tr><th>Notes</th><td>${esc(row.notes ?? '')}</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Subsamples <span class="pill">${row.subsample_count ?? 0}</span></h3>
+        ${subs.length === 0 ? '<div class="muted">None</div>' : `
+          <div class="table-wrap" style="max-height:50vh;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Subsample ID</th>
                   <th>Top (m)</th>
                   <th>Bottom (m)</th>
                   <th>Length (m)</th>
@@ -343,17 +410,17 @@ async function showSampleDetail(recordId) {
               <tbody>
                 ${subs.map(s => `
                   <tr>
-                    <td>${sanitize(s.subsample_id)}</td>
+                    <td>${esc(s.subsample_id)}</td>
                     <td>${s.top_depth_m ?? ''}</td>
                     <td>${s.bottom_depth_m ?? ''}</td>
                     <td>${s.length_m ?? ''}</td>
-                    <td>${sanitize(s.status ?? '')}</td>
-                    <td>${sanitize(s.destination ?? '')}</td>
-                    <td>${sanitize(s.date_sent ?? '')}</td>
-                    <td>${sanitize(s.purpose_notes ?? '')}</td>
-                    <td>${sanitize(s.cut_shape ?? '')}</td>
-                    <td>${sanitize(s.linked_shipment ?? '')}</td>
-                    <td>${sanitize(s.request_id ?? '')}</td>
+                    <td>${esc(s.status ?? '')}</td>
+                    <td>${esc(s.destination ?? '')}</td>
+                    <td>${esc(s.date_sent ?? '')}</td>
+                    <td>${esc(s.purpose_notes ?? '')}</td>
+                    <td>${esc(s.cut_shape ?? '')}</td>
+                    <td>${esc(s.linked_shipment ?? '')}</td>
+                    <td>${esc(s.request_id ?? '')}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -365,12 +432,10 @@ async function showSampleDetail(recordId) {
   `;
 }
 
-// small HTML sanitizer for text fields
-function sanitize(s) {
+// Reuse your existing tiny esc() from renderRows:
+function esc(s) {
   return (s ?? '').toString()
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 }
 
   </script>
