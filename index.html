@@ -85,6 +85,7 @@
             <th>Bottom (m)</th>
             <th>Length (m)</th>
             <th>Remaining (m)</th>
+            <th>Subsampled?</th>
             <th>Status</th>
             <th>Notes</th>
           </tr>
@@ -130,36 +131,37 @@
       return Number.isFinite(n) ? n : null;
     }
 
-    function renderRows(rows) {
-      tbody.innerHTML = '';
-      if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td class="muted" colspan="9">No results.</td></tr>';
-        return;
-      }
-      const esc = (s) => (s ?? '').toString()
-        .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+function renderRows(rows) {
+  tbody.innerHTML = '';
+  if (!rows || rows.length === 0) {
+    tbody.innerHTML = '<tr><td class="muted" colspan="10">No results.</td></tr>';
+    return;
+  }
+  const esc = (s) => (s ?? '').toString()
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 
-      for (const r of rows) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><code class="pill">${esc(r.record_id)}</code></td>
-          <td>${esc(r.core_id)}</td>
-          <td>${esc(r.section_number)}</td>
-          <td>${r.top_depth_m ?? ''}</td>
-          <td>${r.bottom_depth_m ?? ''}</td>
-          <td>${r.length_m ?? ''}</td>
-          <td>${r.remaining_m ?? ''}</td>
-          <td>${esc(r.status ?? 'available')}</td>
-          <td>${esc(r.notes ?? '')}</td>
-        `;
-        tbody.appendChild(tr);
-      }
-    }
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><code class="pill">${esc(r.record_id)}</code></td>
+      <td>${esc(r.core_id)}</td>
+      <td>${esc(r.section_number)}</td>
+      <td>${r.top_depth_m ?? ''}</td>
+      <td>${r.bottom_depth_m ?? ''}</td>
+      <td>${r.length_m ?? ''}</td>
+      <td>${r.remaining_m ?? ''}</td>
+      <td>${r.has_subsamples ? 'Yes' : 'No'}</td>
+      <td>${esc(r.status ?? '')}</td>
+      <td>${esc(r.notes ?? '')}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
 
     function toCSV(rows) {
       const cols = [
         'record_id','core_id','section_number','top_depth_m','bottom_depth_m',
-        'length_m','remaining_m','status','notes'
+        'length_m','remaining_m','has_subsamples','subsample_count','status','notes'
       ];
       const header = cols.join(',');
       const lines = rows.map(r =>
