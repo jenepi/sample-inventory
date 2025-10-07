@@ -258,45 +258,94 @@ const form     = document.getElementById('searchForm');
     lastResults = filtered;
     countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
     renderRows(filtered);
-  }// === Populate Core ID Dropdown from public.core_codes =======================
+  }
+// === Robust Core ID Dropdown loader ========================================
 async function populateCoreDropdown() {
   const select = document.getElementById('coreId');
-  if (!select) return;
+  const label = document.querySelector('label[for="coreId"]');
+  if (!select) { console.warn('coreId <select> not found'); return; }
 
-  select.innerHTML = '<option value="">Loading…</option>';
-  select.disabled = true;
-
-  // Pull from a lightweight public view that exposes distinct core_code
-  const { data, error } = await client
-    .from('core_codes')               // public view
-    .select('core_code')
-    .order('core_code', { ascending: true });
-
-  if (error) {
-    console.error('Error loading core codes:', error);
-    select.innerHTML = `<option value="">(Error: ${error.message || 'loading cores'})</option>`;
+  const setLoading = (msg='Loading…') => {
+    select.innerHTML = `<option value="">${msg}</option>`;
+    select.disabled = true;
+  };
+  const setError = (msg) => {
+    console.error(msg);
+    select.innerHTML = `<option value="">(Error: ${msg})</option>`;
     select.disabled = false;
-    return;
+  };
+  const fill = (codes) => {
+    select.innerHTML = '<option value="">(All cores)</option>';
+    for (const code of codes) {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = code;
+      select.appendChild(opt);
+    }
+    select.disabled = false;
+    if (label) {
+      const countBadge = document.getElementById('coreCountBadge') || Object.assign(document.createElement('span'), { id:'coreCountBadge' });
+      countBadge.className = 'pill';
+      countBadge.style.marginLeft = '6px';
+      countBadge.textContent = codes.length;
+      label.appendChild(countBadge);
+    }
+  };
+
+  setLoading();
+
+  // Strategy 1: public view
+  try {
+    const { data, error } = await client.from('core_codes').select('core_code').order('core_code', { ascending: true });
+    if (error) throw error;
+    const codes = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
+    if (codes.length) return fill(codes);
+  } catch (e) {
+    console.warn('View core_codes failed:', e.message || e);
   }
 
-  const cores = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
-
-  select.innerHTML = '<option value="">(All cores)</option>';
-  for (const core of cores) {
-    const opt = document.createElement('option');
-    opt.value = core;
-    opt.textContent = core;
-    select.appendChild(opt);
+  // Strategy 2: RPC aliasing core_code -> core_id
+  try {
+    const { data, error } = await client.rpc('coldex_get_core_ids');
+    if (error) throw error;
+    const codes = (data ?? []).map(r => (r.core_id || '').trim()).filter(Boolean);
+    if (codes.length) return fill(codes);
+  } catch (e) {
+    console.warn('RPC coldex_get_core_ids failed:', e.message || e);
   }
-  select.disabled = false;
+
+  // Strategy 3: direct schema read (requires RLS policy allowing anon read)
+  try {
+    const { data, error } = await client.schema('coldex').from('cores').select('core_code').order('core_code', { ascending: true });
+    if (error) throw error;
+    const codes = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
+    if (codes.length) return fill(codes);
+  } catch (e) {
+    console.warn('Direct coldex.cores read failed:', e.message || e);
+  }
+
+  setError('No cores available or permissions denied');
 }
 
-// Run once the DOM is loaded
-document.addEventListener('DOMContentLoaded', populateCoreDropdown);
+// Ensure the select exists even if something re-rendered the form
+function ensureCoreSelect() {
+  let select = document.getElementById('coreId');
+  const container = document.querySelector('label[for="coreId"]')?.parentElement;
+  if (!select && container) {
+    select = document.createElement('select');
+    select.id = 'coreId';
+    select.name = 'coreId';
+    select.innerHTML = '<option value="">(All cores)</option>';
+    container.appendChild(select);
+  }
+}
 
-
-
-  form.addEventListener('submit', runSearch);
+// Run on load
+document.addEventListener('DOMContentLoaded', () => {
+  ensureCoreSelect();
+  populateCoreDropdown();
+});
+form.addEventListener('submit', runSearch);
   resetBtn.addEventListener('click', () => {
     form.reset(); clearError();
     lastResults = []; renderRows([]); countEl.textContent = '0 results';
