@@ -399,11 +399,45 @@ function ensureCoreSelect() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  ensureCoreSelect();
-  populateCoreDropdown();
-  attachCoreRefreshButton();
-});
+// --- Attach Core Refresh Button (robust) -----------------------------------
+function attachCoreRefreshButton() {
+  const tryAttach = () => {
+    const label = document.querySelector('label[for="coreId"]');
+    if (label && !document.getElementById('coreRefreshBtn')) {
+      const btn = document.createElement('button');
+      btn.id = 'coreRefreshBtn';
+      btn.textContent = '↻';
+      btn.title = 'Refresh core list';
+      btn.style.padding = '2px 8px';
+      btn.style.marginLeft = '6px';
+      btn.style.borderRadius = '6px';
+      btn.style.border = '1px solid #2b356e';
+      btn.style.background = 'transparent';
+      btn.style.color = '#aab4ff';
+      btn.style.cursor = 'pointer';
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        btn.textContent = '…';
+        btn.disabled = true;
+        localStorage.removeItem(CORE_CACHE_KEY);
+        populateCoreDropdown().finally(() => {
+          btn.textContent = '↻';
+          btn.disabled = false;
+        });
+      });
+      label.appendChild(btn);
+      console.log('Core refresh button attached.');
+    } else if (!document.getElementById('coreRefreshBtn')) {
+      // Retry after 300 ms if label not yet available
+      setTimeout(tryAttach, 300);
+    }
+  };
+  tryAttach();
+}
+
+// Always ensure button exists after dropdown loads
+document.addEventListener('DOMContentLoaded', attachCoreRefreshButton);
+
 form.addEventListener('submit', runSearch);
   resetBtn.addEventListener('click', () => {
     form.reset(); clearError();
