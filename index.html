@@ -256,41 +256,42 @@
     countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
     renderRows(filtered);
   }
-// === Populate Core ID Dropdown =============================================
+// === Populate Core ID Dropdown (from coldex.cores) ==========================
 async function populateCoreDropdown() {
   const select = document.getElementById('coreId');
-  select.innerHTML = '<option value="">Loading...</option>';
+  if (!select) return;
+
+  // Show loading state
+  select.innerHTML = '<option value="">Loading…</option>';
+  select.disabled = true;
+
+  // Query the coldex.cores table
   const { data, error } = await client
-    .from('samples')
-    .select('core_id')
-    .not('core_id', 'is', null);
+    .schema('coldex')
+    .from('cores')
+    .select('core_id, core_code')
+    .order('core_id', { ascending: true });
 
   if (error) {
-    console.error('Error fetching core IDs:', error);
+    console.error('Error fetching cores from coldex.cores:', error);
     select.innerHTML = '<option value="">(Error loading cores)</option>';
+    select.disabled = false;
     return;
   }
 
-  // Get unique core IDs and sort alphabetically
-  const uniqueCores = [...new Set(data.map(row => row.core_id))].sort();
+  // Use whichever field exists (core_id or core_code)
+  const cores = Array.from(
+    new Set(
+      (data ?? [])
+        .map(row => (row.core_id || row.core_code || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+
+  // Populate dropdown
   select.innerHTML = '<option value="">(All cores)</option>';
-  for (const core of uniqueCores) {
-    const opt = document.createElement('option');
-    opt.value = core;
-    opt.textContent = core;
-    select.appendChild(opt);
-  }
-}
-
-// Run it once page loads
-document.addEventListener('DOMContentLoaded', populateCoreDropdown);
-
-  form.addEventListener('submit', runSearch);
-  resetBtn.addEventListener('click', () => {
-    form.reset(); clearError();
-    lastResults = []; renderRows([]); countEl.textContent = '0 results';
-  });
-  csvBtn.addEventListener('click', () => downloadCSV(lastResults));
+  for (const core of cores) {
+    const opt = document.createEle
 
   // ---------- Order-proof modal wiring ----------
   function $id(id){ return document.getElementById(id); }
