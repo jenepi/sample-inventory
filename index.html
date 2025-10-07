@@ -256,6 +256,34 @@
     countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
     renderRows(filtered);
   }
+// === Populate Core ID Dropdown =============================================
+async function populateCoreDropdown() {
+  const select = document.getElementById('coreId');
+  select.innerHTML = '<option value="">Loading...</option>';
+  const { data, error } = await client
+    .from('samples')
+    .select('core_id')
+    .not('core_id', 'is', null);
+
+  if (error) {
+    console.error('Error fetching core IDs:', error);
+    select.innerHTML = '<option value="">(Error loading cores)</option>';
+    return;
+  }
+
+  // Get unique core IDs and sort alphabetically
+  const uniqueCores = [...new Set(data.map(row => row.core_id))].sort();
+  select.innerHTML = '<option value="">(All cores)</option>';
+  for (const core of uniqueCores) {
+    const opt = document.createElement('option');
+    opt.value = core;
+    opt.textContent = core;
+    select.appendChild(opt);
+  }
+}
+
+// Run it once page loads
+document.addEventListener('DOMContentLoaded', populateCoreDropdown);
 
   form.addEventListener('submit', runSearch);
   resetBtn.addEventListener('click', () => {
