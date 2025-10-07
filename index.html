@@ -39,10 +39,8 @@
       <form id="searchForm">
         <div class="grid">
           <div>
-            <label for="coreId">Core ID</label>
-            <select id="coreId" name="coreId">
-            <option value="">(All cores)</option>
-            </select>
+            <label for="coreId">Core ID (prefix ok)</label>
+            <input id="coreId" name="coreId" placeholder="e.g., ALHIC1903" />
           </div>
           <div>
             <label for="minDepth">Min depth (m)</label>
@@ -107,7 +105,10 @@
   // ========================================================================
 
   const client   = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const form     = document.getElementById('searchForm');
+  
+  // Expose for console debugging
+  window.client = client;
+const form     = document.getElementById('searchForm');
   const runBtn   = document.getElementById('runBtn');
   const resetBtn = document.getElementById('resetBtn');
   const csvBtn   = document.getElementById('csvBtn');
@@ -255,43 +256,50 @@
     lastResults = filtered;
     countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
     renderRows(filtered);
-  }
-// === Populate Core ID Dropdown (from coldex.cores) ==========================
+  }// === Populate Core ID Dropdown from public.core_codes =======================
 async function populateCoreDropdown() {
   const select = document.getElementById('coreId');
   if (!select) return;
 
-  // Show loading state
   select.innerHTML = '<option value="">Loading…</option>';
   select.disabled = true;
 
-  // Query the coldex.cores table
+  // Pull from a lightweight public view that exposes distinct core_code
   const { data, error } = await client
-    .schema('coldex')
-    .from('cores')
-    .select('core_id, core_code')
-    .order('core_id', { ascending: true });
+    .from('core_codes')               // public view
+    .select('core_code')
+    .order('core_code', { ascending: true });
 
   if (error) {
-    console.error('Error fetching cores from coldex.cores:', error);
-    select.innerHTML = '<option value="">(Error loading cores)</option>';
+    console.error('Error loading core codes:', error);
+    select.innerHTML = `<option value="">(Error: ${error.message || 'loading cores'})</option>`;
     select.disabled = false;
     return;
   }
 
-  // Use whichever field exists (core_id or core_code)
-  const cores = Array.from(
-    new Set(
-      (data ?? [])
-        .map(row => (row.core_id || row.core_code || '').trim())
-        .filter(Boolean)
-    )
-  ).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+  const cores = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
 
-  // Populate dropdown
   select.innerHTML = '<option value="">(All cores)</option>';
   for (const core of cores) {
-    const opt = document.createEle
+    const opt = document.createElement('option');
+    opt.value = core;
+    opt.textContent = core;
+    select.appendChild(opt);
+  }
+  select.disabled = false;
+}
+
+// Run once the DOM is loaded
+document.addEventListener('DOMContentLoaded', populateCoreDropdown);
+
+
+
+  form.addEventListener('submit', runSearch);
+  resetBtn.addEventListener('click', () => {
+    form.reset(); clearError();
+    lastResults = []; renderRows([]); countEl.textContent = '0 results';
+  });
+  csvBtn.addEventListener('click', () => downloadCSV(lastResults));
 
   // ---------- Order-proof modal wiring ----------
   function $id(id){ return document.getElementById(id); }
