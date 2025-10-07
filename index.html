@@ -259,75 +259,114 @@ const form     = document.getElementById('searchForm');
     countEl.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
     renderRows(filtered);
   }
-// === Robust Core ID Dropdown loader ========================================
-async function populateCoreDropdown() {
+
+// === Core codes cache + loader =============================================
+const CORE_CACHE_KEY = 'coreCodes:v2';           // bump version to invalidate old cache
+const CORE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;   // 12 hours
+
+function readCoreCache() {
+  try {
+    const raw = localStorage.getItem(CORE_CACHE_KEY);
+    if (!raw) return null;
+    const { codes, ts } = JSON.parse(raw);
+    if (!Array.isArray(codes) || typeof ts !== 'number') return null;
+    const fresh = (Date.now() - ts) < CORE_CACHE_TTL_MS;
+    return { codes, fresh };
+  } catch { return null; }
+}
+
+function writeCoreCache(codes) {
+  try {
+    localStorage.setItem(CORE_CACHE_KEY, JSON.stringify({ codes, ts: Date.now() }));
+  } catch {}
+}
+
+function fillCoreSelect(codes) {
   const select = document.getElementById('coreId');
   const label = document.querySelector('label[for="coreId"]');
-  if (!select) { console.warn('coreId <select> not found'); return; }
-
-  const setLoading = (msg='Loading…') => {
-    select.innerHTML = `<option value="">${msg}</option>`;
-    select.disabled = true;
-  };
-  const setError = (msg) => {
-    console.error(msg);
-    select.innerHTML = `<option value="">(Error: ${msg})</option>`;
-    select.disabled = false;
-  };
-  const fill = (codes) => {
-    select.innerHTML = '<option value="">(All cores)</option>';
-    for (const code of codes) {
-      const opt = document.createElement('option');
-      opt.value = code;
-      opt.textContent = code;
-      select.appendChild(opt);
+  if (!select) return;
+  select.innerHTML = '<option value="">(All cores)</option>';
+  for (const code of codes) {
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = code;
+    select.appendChild(opt);
+  }
+  select.disabled = false;
+  if (label) {
+    let badge = document.getElementById('coreCountBadge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.id = 'coreCountBadge';
+      badge.className = 'pill';
+      badge.style.marginLeft = '6px';
+      label.appendChild(badge);
     }
-    select.disabled = false;
-    if (label) {
-      const countBadge = document.getElementById('coreCountBadge') || Object.assign(document.createElement('span'), { id:'coreCountBadge' });
-      countBadge.className = 'pill';
-      countBadge.style.marginLeft = '6px';
-      countBadge.textContent = codes.length;
-      label.appendChild(countBadge);
-    }
-  };
+    badge.textContent = codes.length;
+  }
+}
 
-  setLoading();
-
+async function fetchCoreCodesNetwork() {
   // Strategy 1: public view
   try {
     const { data, error } = await client.from('core_codes').select('core_code').order('core_code', { ascending: true });
     if (error) throw error;
     const codes = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
-    if (codes.length) return fill(codes);
-  } catch (e) {
-    console.warn('View core_codes failed:', e.message || e);
-  }
+    if (codes.length) return codes;
+  } catch (e) { console.warn('View core_codes failed:', e.message || e); }
 
-  // Strategy 2: RPC aliasing core_code -> core_id
+  // Strategy 2: RPC
   try {
     const { data, error } = await client.rpc('coldex_get_core_ids');
     if (error) throw error;
     const codes = (data ?? []).map(r => (r.core_id || '').trim()).filter(Boolean);
-    if (codes.length) return fill(codes);
-  } catch (e) {
-    console.warn('RPC coldex_get_core_ids failed:', e.message || e);
-  }
+    if (codes.length) return codes;
+  } catch (e) { console.warn('RPC coldex_get_core_ids failed:', e.message || e); }
 
-  // Strategy 3: direct schema read (requires RLS policy allowing anon read)
+  // Strategy 3: direct schema read
   try {
     const { data, error } = await client.schema('coldex').from('cores').select('core_code').order('core_code', { ascending: true });
     if (error) throw error;
     const codes = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
-    if (codes.length) return fill(codes);
-  } catch (e) {
-    console.warn('Direct coldex.cores read failed:', e.message || e);
-  }
+    if (codes.length) return codes;
+  } catch (e) { console.warn('Direct coldex.cores read failed:', e.message || e); }
 
-  setError('No cores available or permissions denied');
+  return [];
 }
 
-// Ensure the select exists even if something re-rendered the form
+// Populate with cache (if fresh) and then revalidate in background.
+async function populateCoreDropdown() {
+  const select = document.getElementById('coreId');
+  if (!select) return;
+  select.disabled = true;
+  select.innerHTML = '<option value="">Loading…</option>';
+
+  // 1) Try cache
+  const cached = readCoreCache();
+  if (cached?.codes?.length) {
+    fillCoreSelect(cached.codes);
+  }
+
+  // 2) Network fetch (always) and update if different
+  const liveCodes = await fetchCoreCodesNetwork();
+  if (liveCodes.length) {
+    const cachedStr = JSON.stringify((cached?.codes) || []);
+    const liveStr   = JSON.stringify(liveCodes);
+    if (cachedStr !== liveStr) {
+      fillCoreSelect(liveCodes);
+      writeCoreCache(liveCodes);
+    } else if (!cached?.fresh) {
+      // Cache exists but stale; refresh timestamp
+      writeCoreCache(liveCodes);
+    }
+  } else if (!cached?.codes?.length) {
+    // Nothing to show
+    select.innerHTML = '<option value="">(No cores found)</option>';
+    select.disabled = false;
+  }
+}
+
+// Ensure the select exists
 function ensureCoreSelect() {
   let select = document.getElementById('coreId');
   const container = document.querySelector('label[for="coreId"]')?.parentElement;
@@ -340,7 +379,6 @@ function ensureCoreSelect() {
   }
 }
 
-// Run on load
 document.addEventListener('DOMContentLoaded', () => {
   ensureCoreSelect();
   populateCoreDropdown();
