@@ -399,41 +399,45 @@ function ensureCoreSelect() {
   }
 }
 
-// --- Attach Core Refresh Button (robust) -----------------------------------
+// --- Final guaranteed refresh button attachment ----------------------------
 function attachCoreRefreshButton() {
   const tryAttach = () => {
-    const label = document.querySelector('label[for="coreId"]');
-    if (label && !document.getElementById('coreRefreshBtn')) {
+    const coreContainer = document.querySelector('#coreId')?.parentElement;
+    if (coreContainer && !document.getElementById('coreRefreshBtn')) {
       const btn = document.createElement('button');
       btn.id = 'coreRefreshBtn';
       btn.textContent = '↻';
       btn.title = 'Refresh core list';
       btn.style.padding = '2px 8px';
-      btn.style.marginLeft = '6px';
+      btn.style.marginTop = 'auto';
+      btn.style.marginLeft = '4px';
+      btn.style.height = '36px';
       btn.style.borderRadius = '6px';
       btn.style.border = '1px solid #2b356e';
       btn.style.background = 'transparent';
       btn.style.color = '#aab4ff';
       btn.style.cursor = 'pointer';
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
         btn.textContent = '…';
         btn.disabled = true;
         localStorage.removeItem(CORE_CACHE_KEY);
-        populateCoreDropdown().finally(() => {
-          btn.textContent = '↻';
-          btn.disabled = false;
-        });
+        await populateCoreDropdown();
+        btn.textContent = '↻';
+        btn.disabled = false;
       });
-      label.appendChild(btn);
+      coreContainer.style.display = 'flex';
+      coreContainer.style.alignItems = 'center';
+      coreContainer.appendChild(btn);
       console.log('Core refresh button attached.');
     } else if (!document.getElementById('coreRefreshBtn')) {
-      // Retry after 300 ms if label not yet available
       setTimeout(tryAttach, 300);
     }
   };
   tryAttach();
 }
+
+document.addEventListener('DOMContentLoaded', attachCoreRefreshButton);
 
 // Always ensure button exists after dropdown loads
 document.addEventListener('DOMContentLoaded', attachCoreRefreshButton);
