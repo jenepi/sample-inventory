@@ -29,7 +29,27 @@
     .error { background:#2c1220; border:1px solid #a13357; color:#ffd4df; padding:10px 12px; border-radius:10px; margin-top:10px; display:none;}
     .ok { display:none; }
     .sr { position:absolute; left:-9999px; }
-  </style>
+  
+#coreRefreshBtn {
+  background: transparent;
+  border: 1px solid #2b356e;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #aab4ff;
+  font-weight: 600;
+  padding: 2px 8px;
+  margin-left: 6px;
+}
+#coreRefreshBtn:hover {
+  background: #1e2752;
+}
+label[for="coreId"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -382,6 +402,7 @@ function ensureCoreSelect() {
 document.addEventListener('DOMContentLoaded', () => {
   ensureCoreSelect();
   populateCoreDropdown();
+  attachCoreRefreshButton();
 });
 form.addEventListener('submit', runSearch);
   resetBtn.addEventListener('click', () => {
