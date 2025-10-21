@@ -43,7 +43,7 @@
     }
 
     select { min-width: 220px; }
-    #coreId { width: 100%; }              /* core list fills its column */
+    #coreId { width: 100%; min-height: 8.5em;}              /* core list fills its column */
     select[multiple] { min-width: 260px; } /* a bit wider when multi */
 
     input::placeholder { color: #94a3b8; }
@@ -90,18 +90,21 @@
         <div class="grid">
           <!-- Core ID now spans 2 columns and stacks nicely -->
           <div class="col-span-2">
-            <label for="coreId">Core ID <span id="coreCountBadge" class="pill" style="margin-left:6px;">—</span></label>
-          <!--  <select id="coreId" name="coreId"> -->
-           <!--   <option value="">(All cores)</option> -->
-           <!-- </select> -->
-            <div class="core-controls">
-              <button id="coreMultiBtn" class="btn btn-ghost" type="button" title="Toggle multi-select">Multi</button>
-              <button id="coreSelectAllBtn" class="btn btn-ghost" type="button" title="Select all cores">All</button>
-              <button id="coreClearBtn" class="btn btn-ghost" type="button" title="Clear selection">Clear</button>
-              <button id="coreRefreshBtn" class="btn btn-ghost" type="button" title="Refresh core list">↻</button>
-              <span class="muted" style="margin-left:6px;">Tip: hold Cmd/Ctrl to select multiple.</span>
-            </div>
-          </div>
+  <label for="coreId">Core ID <span id="coreCountBadge" class="pill" style="margin-left:6px;">—</span></label>
+
+  <!-- Always-on multiselect -->
+  <select id="coreId" name="coreId" multiple>
+    <!-- options injected by JS -->
+  </select>
+
+  <div class="core-controls">
+    <button id="coreSelectAllBtn" class="btn btn-ghost" type="button" title="Select all cores">All</button>
+    <button id="coreClearBtn" class="btn btn-ghost" type="button" title="Clear selection">Clear</button>
+    <button id="coreRefreshBtn" class="btn btn-ghost" type="button" title="Refresh core list">↻</button>
+    <span class="muted" style="margin-left:6px;">Tip: hold Cmd/Ctrl to select multiple.</span>
+  </div>
+</div>
+
 
           <div>
             <label for="minDepth">Min depth (m)</label>
@@ -177,7 +180,6 @@
     const errEl    = document.getElementById('err');
 
     const coreSelect        = document.getElementById('coreId');
-    const coreMultiBtn      = document.getElementById('coreMultiBtn');
     const coreSelectAllBtn  = document.getElementById('coreSelectAllBtn');
     const coreClearBtn      = document.getElementById('coreClearBtn');
     const coreRefreshBtn    = document.getElementById('coreRefreshBtn');
@@ -338,21 +340,28 @@
     }
 
     function fillCoreSelect(codes) {
-      const prev = new Set(getSelectedCores());
-      coreSelect.innerHTML = '<option value="">(All cores)</option>';
-      for (const code of codes) {
-        const opt = document.createElement('option');
-        opt.value = code;
-        opt.textContent = code;
-        if (prev.has(code)) opt.selected = true;
-        coreSelect.appendChild(opt);
-      }
-      // Size depends on mode
-      coreSelect.size = isMulti ? Math.min(8, Math.max(4, coreSelect.options.length)) : 1;
-      coreSelect.disabled = false;
+  const prev = new Set(getSelectedCores());
 
-      if (coreCountBadge) coreCountBadge.textContent = codes.length;
-    }
+  // Always multi: no (All cores) sentinel option
+  coreSelect.innerHTML = '';
+  for (const code of codes) {
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = code;
+    if (prev.has(code)) opt.selected = true;
+    coreSelect.appendChild(opt);
+  }
+
+  // Ensure multi-select sizing
+  coreSelect.multiple = true;
+  // show 6–10 rows depending on length
+  const rows = Math.max(6, Math.min(10, coreSelect.options.length));
+  coreSelect.size = rows;
+
+  coreSelect.disabled = false;
+  if (coreCountBadge) coreCountBadge.textContent = codes.length;
+}
+
 
     async function fetchCoreCodesNetwork() {
       // Strategy 1: public view
@@ -416,12 +425,12 @@
     function openDetail(){ const m=$id('detailModal'); if (m) m.style.display='flex'; }
     function closeDetail(){ const m=$id('detailModal'); if (m) m.style.display='none'; }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const modal   = $id('detailModal');
-      const closeBn = $id('detailClose');
-      if (modal)   modal.addEventListener('click', (e) => { if (e.target === modal) closeDetail(); });
-      if (closeBn) closeBn.addEventListener('click', closeDetail);
-    });
+  document.addEventListener('DOMContentLoaded', async () => {
+  await populateCoreDropdown();
+  // make sure it's multi (in case of race)
+  coreSelect.multiple = true;
+});
+
 
     // Delegate clicks for Record ID and Core ID buttons
     tbody.addEventListener('click', async (e) => {
@@ -634,40 +643,27 @@
 
     csvBtn.addEventListener('click', () => downloadCSV(lastResults));
 
-    function setMultiMode(on){
-      isMulti = !!on;
-      coreSelect.multiple = isMulti;
-      coreSelect.size = isMulti ? Math.min(8, Math.max(4, coreSelect.options.length)) : 1;
-      coreMultiBtn.textContent = isMulti ? 'Done' : 'Multi';
-    }
-
-    coreMultiBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      setMultiMode(!isMulti);
-    });
-
     coreSelectAllBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      setMultiMode(true);
-      for (const opt of coreSelect.options) { if (opt.value) opt.selected = true; }
-    });
+  e.preventDefault();
+  for (const opt of coreSelect.options) opt.selected = true;
+});
 
-    coreClearBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      for (const opt of coreSelect.options) { opt.selected = false; }
-    });
+coreClearBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  for (const opt of coreSelect.options) opt.selected = false;
+});
 
-    coreRefreshBtn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      const b = coreRefreshBtn;
-      b.textContent = '…';
-      b.disabled = true;
-      localStorage.removeItem(CORE_CACHE_KEY);
-      await populateCoreDropdown();
-      setMultiMode(isMulti); // restore size after refresh
-      b.textContent = '↻';
-      b.disabled = false;
-    });
+coreRefreshBtn.addEventListener('click', async (e) => {
+  e.preventDefault();
+  const b = coreRefreshBtn;
+  b.textContent = '…';
+  b.disabled = true;
+  localStorage.removeItem(CORE_CACHE_KEY);
+  await populateCoreDropdown();
+  b.textContent = '↻';
+  b.disabled = false;
+});
+
 
     document.addEventListener('DOMContentLoaded', async () => {
       ensureCoreSelect();
