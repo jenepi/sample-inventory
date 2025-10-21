@@ -200,7 +200,7 @@
   
   // Expose for console debugging
   window.client = client;
-const form     = document.getElementById('searchForm');
+  const form     = document.getElementById('searchForm');
   const runBtn   = document.getElementById('runBtn');
   const resetBtn = document.getElementById('resetBtn');
   const csvBtn   = document.getElementById('csvBtn');
@@ -242,7 +242,12 @@ const form     = document.getElementById('searchForm');
             ${esc(r.record_id)}
           </button>
         </td>
-        <td>${esc(r.core_id)}</td>
+        <td>
+          <button class="pill" data-core-id="${esc(r.core_id)}"
+                  style="cursor:pointer; background:none; border:1px solid #2563eb;">
+            ${esc(r.core_id)}
+          </button>
+        </td>
         <td>${esc(r.section_number)}</td>
         <td>${r.top_depth_m ?? ''}</td>
         <td>${r.bottom_depth_m ?? ''}</td>
@@ -483,9 +488,9 @@ function attachCoreRefreshButton() {
       btn.style.marginLeft = '4px';
       btn.style.height = '36px';
       btn.style.borderRadius = '6px';
-      btn.style.border = '1px solid #2b356e';
-      btn.style.background = 'transparent';
-      btn.style.color = '#aab4ff';
+      btn.style.border = '1px solid #cbd5e1'; // light-mode border
+      btn.style.background = '#f1f5f9';       // light-mode bg
+      btn.style.color = '#334155';            // light-mode text
       btn.style.cursor = 'pointer';
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
@@ -507,45 +512,56 @@ function attachCoreRefreshButton() {
   tryAttach();
 }
 
-document.addEventListener('DOMContentLoaded', attachCoreRefreshButton);
-
-// Always ensure button exists after dropdown loads
-document.addEventListener('DOMContentLoaded', attachCoreRefreshButton);
+// Single, ordered DOMContentLoaded to populate cores and attach button
+document.addEventListener('DOMContentLoaded', async () => {
+  ensureCoreSelect();
+  await populateCoreDropdown();
+  attachCoreRefreshButton();
+});
 
 form.addEventListener('submit', runSearch);
-  resetBtn.addEventListener('click', () => {
-    form.reset(); clearError();
-    lastResults = []; renderRows([]); countEl.textContent = '0 results';
-  });
-  csvBtn.addEventListener('click', () => downloadCSV(lastResults));
+resetBtn.addEventListener('click', () => {
+  form.reset(); clearError();
+  lastResults = []; renderRows([]); countEl.textContent = '0 results';
+});
+csvBtn.addEventListener('click', () => downloadCSV(lastResults));
 
-  // ---------- Order-proof modal wiring ----------
-  function $id(id){ return document.getElementById(id); }
-  function openDetail(){ const m=$id('detailModal'); if (m) m.style.display='flex'; }
-  function closeDetail(){ const m=$id('detailModal'); if (m) m.style.display='none'; }
+// ---------- Order-proof modal wiring ----------
+function $id(id){ return document.getElementById(id); }
+function openDetail(){ const m=$id('detailModal'); if (m) m.style.display='flex'; }
+function closeDetail(){ const m=$id('detailModal'); if (m) m.style.display='none'; }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const modal   = $id('detailModal');
-    const closeBn = $id('detailClose');
-    if (modal)   modal.addEventListener('click', (e) => { if (e.target === modal) closeDetail(); });
-    if (closeBn) closeBn.addEventListener('click', closeDetail);
-  });
+document.addEventListener('DOMContentLoaded', () => {
+  const modal   = $id('detailModal');
+  const closeBn = $id('detailClose');
+  if (modal)   modal.addEventListener('click', (e) => { if (e.target === modal) closeDetail(); });
+  if (closeBn) closeBn.addEventListener('click', closeDetail);
+});
 
-  // Delegate Record-ID clicks from the results table
-  tbody.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-record-id]');
-    if (!btn) return;
-    const recordId = btn.getAttribute('data-record-id');
+// Delegate clicks for Record ID and Core ID buttons
+tbody.addEventListener('click', async (e) => {
+  const recordBtn = e.target.closest('[data-record-id]');
+  if (recordBtn) {
+    const recordId = recordBtn.getAttribute('data-record-id');
     await showSampleDetail(recordId);
-  });
-
-  // global esc helper for modal rendering
-  function esc(s) {
-    return (s ?? '').toString()
-      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+    return;
   }
 
-  async function showSampleDetail(recordId) {
+  const coreBtn = e.target.closest('[data-core-id]');
+  if (coreBtn) {
+    const coreCode = coreBtn.getAttribute('data-core-id');
+    await showCoreDetail(coreCode);
+    return;
+  }
+});
+
+// global esc helper for modal rendering
+function esc(s) {
+  return (s ?? '').toString()
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+}
+
+async function showSampleDetail(recordId) {
   const title = $id('detailTitle');
   const body  = $id('detailBody');
   if (title) title.textContent = `Sample ${recordId}`;
@@ -632,6 +648,93 @@ form.addEventListener('submit', runSearch);
   `;
 
   if (body) body.innerHTML = sampleTable;
+}
+
+// === NEW: Core metadata modal =============================================
+async function showCoreDetail(coreCode) {
+  const title = $id('detailTitle');
+  const body  = $id('detailBody');
+  if (title) title.textContent = `Core ${coreCode}`;
+  if (body)  body.innerHTML = 'Loading…';
+  openDetail();
+
+  // Try direct read from coldex.cores by core_code
+  let data = null, error = null;
+  try {
+    const resp = await client
+      .schema('coldex')
+      .from('cores')
+      .select('*')
+      .eq('core_code', coreCode)
+      .single();
+    data  = resp.data;
+    error = resp.error || null;
+  } catch (e) {
+    error = e;
+  }
+
+  if (error) {
+    console.error(error);
+    if (body) body.innerHTML = `<div class="error" style="display:block">Error: ${esc(error.message || 'Failed to load core metadata')}</div>`;
+    return;
+  }
+  if (!data) {
+    if (body) body.innerHTML = `<div class="muted">No metadata found for ${esc(coreCode)}.</div>`;
+    return;
+  }
+
+  const preferred = [
+    ['core_code','Core ID'],
+    ['site_id','Site'],
+    ['core_uuid','Core UUID'],
+    ['expedition','Expedition'],
+    ['drill_type','Drill type'],
+    ['year','Year'],
+    ['latitude','Latitude'],
+    ['longitude','Longitude'],
+    ['elevation_m','Elevation (m)'],
+    ['start_depth_m','Top depth (m)'],
+    ['end_depth_m','Bottom depth (m)'],
+    ['length_m','Total length (m)'],
+    ['storage_location','Storage'],
+    ['status','Status'],
+    ['notes','Notes']
+  ];
+
+  const prefRows = preferred
+    .filter(([k]) => k in data && data[k] !== null && data[k] !== '')
+    .map(([k,label]) => `<tr><th style="width:200px;">${esc(label)}</th><td>${esc(data[k])}</td></tr>`)
+    .join('');
+
+  const shownKeys = new Set(preferred.map(([k]) => k));
+  const otherEntries = Object.entries(data)
+    .filter(([k,v]) => !shownKeys.has(k) && v !== null && v !== '' && typeof v !== 'object')
+    .sort(([a],[b]) => a.localeCompare(b));
+
+  const otherRows = otherEntries.length
+    ? otherEntries.map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')
+    : '<tr><td class="muted" colspan="2">No additional fields.</td></tr>';
+
+  const html = `
+    <div class="card" style="margin-bottom:12px;">
+      <h3 style="margin:0 0 8px;">Core Metadata</h3>
+      <table>
+        ${prefRows || '<tr><td class="muted" colspan="2">No standard fields present.</td></tr>'}
+      </table>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px;">All fields</h3>
+      <div class="table-wrap" style="max-height:50vh;">
+        <table>
+          <thead><tr><th style="width:200px;">Field</th><th>Value</th></tr></thead>
+          <tbody>${otherRows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  if (body) body.innerHTML = html;
 }
 
 </script>
