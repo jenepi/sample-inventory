@@ -658,17 +658,12 @@ async function showCoreDetail(coreCode) {
   if (body)  body.innerHTML = 'Loading…';
   openDetail();
 
-  // Try direct read from coldex.cores by core_code
+  // Fetch via RPC instead of direct schema read
   let data = null, error = null;
   try {
-    const resp = await client
-      .schema('coldex')
-      .from('cores')
-      .select('*')
-      .eq('core_code', coreCode)
-      .single();
-    data  = resp.data;
+    const resp = await client.rpc('get_core_detail', { p_core_code: coreCode });
     error = resp.error || null;
+    data  = Array.isArray(resp.data) ? resp.data[0] : null; // single row
   } catch (e) {
     error = e;
   }
@@ -683,27 +678,25 @@ async function showCoreDetail(coreCode) {
     return;
   }
 
+  // Match your coldex.cores columns
   const preferred = [
     ['core_code','Core ID'],
-    ['site_id','Site'],
+    ['site_name','Site'],
     ['core_uuid','Core UUID'],
-    ['expedition','Expedition'],
+    ['drill_date','Drill date'],
+    ['pi','PI'],
     ['drill_type','Drill type'],
-    ['year','Year'],
-    ['latitude','Latitude'],
-    ['longitude','Longitude'],
+    ['latitude_deg','Latitude (deg)'],
+    ['longitude_deg','Longitude (deg)'],
     ['elevation_m','Elevation (m)'],
-    ['start_depth_m','Top depth (m)'],
-    ['end_depth_m','Bottom depth (m)'],
-    ['length_m','Total length (m)'],
-    ['storage_location','Storage'],
-    ['status','Status'],
+    ['maximum_depth','Maximum depth (m)'],
+    ['oldest_age','Oldest age'],
     ['notes','Notes']
   ];
 
   const prefRows = preferred
     .filter(([k]) => k in data && data[k] !== null && data[k] !== '')
-    .map(([k,label]) => `<tr><th style="width:200px;">${esc(label)}</th><td>${esc(data[k])}</td></tr>`)
+    .map(([k,label]) => `<tr><th style=\"width:200px;\">${esc(label)}</th><td>${esc(data[k])}</td></tr>`)
     .join('');
 
   const shownKeys = new Set(preferred.map(([k]) => k));
