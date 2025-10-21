@@ -692,10 +692,17 @@ async function showCoreDetail(coreCode) {
     ['oldest_age','Oldest age'],
     ['notes','Notes']
   ];
+  function fmtVal(key, val) {
+  if (val == null || val === '') return '';
+  if (key === 'oldest_age' && !isNaN(val)) {
+    return Number(val).toLocaleString('en-US');
+  }
+  return val;
+}
 
   const prefRows = preferred
     .filter(([k]) => k in data && data[k] !== null && data[k] !== '')
-    .map(([k,label]) => `<tr><th style=\"width:200px;\">${esc(label)}</th><td>${esc(data[k])}</td></tr>`)
+    .map(([k,label]) => `<tr><th style=\"width:200px;\">${esc(label)}</th><td>${esc(fmtVal(k, data[k]))}</td></tr>`)
     .join('');
 
   const shownKeys = new Set(preferred.map(([k]) => k));
