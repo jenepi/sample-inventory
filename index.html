@@ -29,6 +29,9 @@
     .grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: var(--gap); }
     .grid > div { display: flex; flex-direction: column; }
 
+    /* make the Core ID column span 2 grid columns for breathing room */
+    .col-span-2 { grid-column: span 2; }
+
     label { font-size: 12px; color: #475569; margin-bottom: 6px; letter-spacing: .2px; }
 
     input, select, button {
@@ -40,7 +43,8 @@
     }
 
     select { min-width: 220px; }
-    select[multiple] { min-width: 260px; }
+    #coreId { width: 100%; }              /* core list fills its column */
+    select[multiple] { min-width: 260px; } /* a bit wider when multi */
 
     input::placeholder { color: #94a3b8; }
 
@@ -58,57 +62,23 @@
 
     table { width: 100%; border-collapse: collapse; }
 
-    th, td {
-      text-align: left;
-      padding: 10px 12px;
-      border-bottom: 1px solid #e2e8f0;
-      vertical-align: top;
-    }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+    th { position: sticky; top: 0; background: #f1f5f9; z-index: 1; }
 
-    th {
-      position: sticky;
-      top: 0;
-      background: #f1f5f9;
-      z-index: 1;
-    }
+    .table-wrap { overflow: auto; max-height: 70vh; border-radius: 10px; border: 1px solid #e2e8f0; }
 
-    .table-wrap {
-      overflow: auto;
-      max-height: 70vh;
-      border-radius: 10px;
-      border: 1px solid #e2e8f0;
-    }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #cbd5e1; font-size: 12px; color: #0f172a; background: #f1f5f9; }
 
-    .pill {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid #cbd5e1;
-      font-size: 12px;
-      color: #0f172a;
-      background: #f1f5f9;
-    }
+    .foot { display: flex; justify-content: space-between; align-items: center; margin-top: var(--gap); }
 
-    .foot {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: var(--gap);
-    }
-
-    .error {
-      background: #fef2f2;
-      border: 1px solid #fca5a5;
-      color: #991b1b;
-      padding: 10px 12px;
-      border-radius: 10px;
-      margin-top: 10px;
-      display: none;
-    }
+    .error { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; padding: 10px 12px; border-radius: 10px; margin-top: 10px; display: none; }
 
     .ok { display: none; }
-
     .sr { position: absolute; left: -9999px; }
+
+    /* neat row for the core controls under the list */
+    .core-controls { display:flex; gap:6px; flex-wrap:wrap; margin-top: 6px; }
+    .core-controls .btn { padding: 6px 10px; }
   </style>
 </head>
 <body>
@@ -118,20 +88,21 @@
     <div class="card" style="margin-bottom:16px;">
       <form id="searchForm">
         <div class="grid">
-          <div>
-            <label for="coreId">Core ID</label>
-            <div style="display:flex; gap:8px; align-items:flex-start;">
-              <select id="coreId" name="coreId">
-                <option value="">(All cores)</option>
-              </select>
-              <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                <button id="coreMultiBtn" class="btn btn-ghost" type="button" title="Toggle multi-select">Multi</button>
-                <button id="coreSelectAllBtn" class="btn btn-ghost" type="button" title="Select all cores">All</button>
-                <button id="coreClearBtn" class="btn btn-ghost" type="button" title="Clear selection">Clear</button>
-                <button id="coreRefreshBtn" class="btn btn-ghost" type="button" title="Refresh core list">↻</button>
-              </div>
+          <!-- Core ID now spans 2 columns and stacks nicely -->
+          <div class="col-span-2">
+            <label for="coreId">Core ID <span id="coreCountBadge" class="pill" style="margin-left:6px;">—</span></label>
+            <select id="coreId" name="coreId">
+              <option value="">(All cores)</option>
+            </select>
+            <div class="core-controls">
+              <button id="coreMultiBtn" class="btn btn-ghost" type="button" title="Toggle multi-select">Multi</button>
+              <button id="coreSelectAllBtn" class="btn btn-ghost" type="button" title="Select all cores">All</button>
+              <button id="coreClearBtn" class="btn btn-ghost" type="button" title="Clear selection">Clear</button>
+              <button id="coreRefreshBtn" class="btn btn-ghost" type="button" title="Refresh core list">↻</button>
+              <span class="muted" style="margin-left:6px;">Tip: hold Cmd/Ctrl to select multiple.</span>
             </div>
           </div>
+
           <div>
             <label for="minDepth">Min depth (m)</label>
             <input id="minDepth" name="minDepth" type="number" step="0.01" placeholder="optional" />
@@ -210,6 +181,7 @@
     const coreSelectAllBtn  = document.getElementById('coreSelectAllBtn');
     const coreClearBtn      = document.getElementById('coreClearBtn');
     const coreRefreshBtn    = document.getElementById('coreRefreshBtn');
+    const coreCountBadge    = document.getElementById('coreCountBadge');
 
     let lastResults = [];
     let isMulti = false; // UI state for core selector
@@ -366,45 +338,26 @@
     }
 
     function fillCoreSelect(codes) {
-      const select = coreSelect;
-      const label = document.querySelector('label[for="coreId"]');
-      if (!select) return;
-
-      // Preserve current selections if possible
       const prev = new Set(getSelectedCores());
-
-      select.innerHTML = '<option value="">(All cores)</option>';
+      coreSelect.innerHTML = '<option value="">(All cores)</option>';
       for (const code of codes) {
         const opt = document.createElement('option');
         opt.value = code;
         opt.textContent = code;
         if (prev.has(code)) opt.selected = true;
-        select.appendChild(opt);
+        coreSelect.appendChild(opt);
       }
       // Size depends on mode
-      select.size = isMulti ? Math.min(8, Math.max(4, select.options.length)) : 1;
-      select.disabled = false;
+      coreSelect.size = isMulti ? Math.min(8, Math.max(4, coreSelect.options.length)) : 1;
+      coreSelect.disabled = false;
 
-      if (label) {
-        let badge = document.getElementById('coreCountBadge');
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.id = 'coreCountBadge';
-          badge.className = 'pill';
-          badge.style.marginLeft = '6px';
-          label.appendChild(badge);
-        }
-        badge.textContent = codes.length;
-      }
+      if (coreCountBadge) coreCountBadge.textContent = codes.length;
     }
 
     async function fetchCoreCodesNetwork() {
       // Strategy 1: public view
       try {
-        const { data, error } = await client
-          .from('core_codes')
-          .select('core_code')
-          .order('core_code', { ascending: true });
+        const { data, error } = await client.from('core_codes').select('core_code').order('core_code', { ascending: true });
         if (error) throw error;
         const codes = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
         if (codes.length) return codes;
@@ -418,13 +371,9 @@
         if (codes.length) return codes;
       } catch (e) { console.warn('RPC coldex_get_core_ids failed:', e.message || e); }
 
-      // Strategy 3: direct schema read (may be blocked)
+      // Strategy 3: direct schema read (may be blocked on anon)
       try {
-        const { data, error } = await client
-          .schema('coldex')
-          .from('cores')
-          .select('core_code')
-          .order('core_code', { ascending: true });
+        const { data, error } = await client.schema('coldex').from('cores').select('core_code').order('core_code', { ascending: true });
         if (error) throw error;
         const codes = (data ?? []).map(r => (r.core_code || '').trim()).filter(Boolean);
         if (codes.length) return codes;
@@ -434,10 +383,8 @@
     }
 
     async function populateCoreDropdown() {
-      const select = coreSelect;
-      if (!select) return;
-      select.disabled = true;
-      select.innerHTML = '<option value="">Loading…</option>';
+      coreSelect.disabled = true;
+      coreSelect.innerHTML = '<option value="">Loading…</option>';
 
       const cached = readCoreCache();
       if (cached?.codes?.length) {
@@ -455,21 +402,13 @@
           writeCoreCache(liveCodes);
         }
       } else if (!cached?.codes?.length) {
-        select.innerHTML = '<option value="">(No cores found)</option>';
-        select.disabled = false;
+        coreSelect.innerHTML = '<option value="">(No cores found)</option>';
+        coreSelect.disabled = false;
       }
     }
 
     function ensureCoreSelect() {
-      let select = coreSelect;
-      const container = document.querySelector('label[for="coreId"]')?.parentElement;
-      if (!select && container) {
-        select = document.createElement('select');
-        select.id = 'coreId';
-        select.name = 'coreId';
-        select.innerHTML = '<option value="">(All cores)</option>';
-        container.appendChild(select);
-      }
+      if (!coreSelect) return;
     }
 
     // ---------- Modal wiring ----------
@@ -687,7 +626,6 @@
     resetBtn.addEventListener('click', () => {
       form.reset();
       clearError();
-      // also clear multi-select programmatically
       for (const opt of coreSelect.options) opt.selected = false;
       lastResults = [];
       renderRows([]);
