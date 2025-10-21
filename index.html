@@ -287,37 +287,48 @@
         return Number.isFinite(n) ? n : null;
       };
 
-      const selectedCores = getSelectedCores();
-      const coreId   = selectedCores.length === 1 ? selectedCores[0] : null; // single -> RPC
-      const minDepth = toNullOrNumber(document.getElementById('minDepth').value);
-      const maxDepth = toNullOrNumber(document.getElementById('maxDepth').value);
-      const rawStatus = document.getElementById('status').value.trim();
-      const status    = rawStatus === '' ? null : rawStatus;
+     const selectedCores = getSelectedCores();
+const toNull = v => (v === undefined || v === '' ? null : v);
 
-      const { data, error } = await client.rpc(RPC_FUNCTION, {
-        p_core_id:   coreId,
-        p_min_depth: minDepth,
-        p_max_depth: maxDepth,
-        p_status:    status
-      });
+// Normalize status/min/max
+const rpcMin = (minDepth ?? null);
+const rpcMax = (maxDepth ?? null);
+const rpcStatus = (status ?? null);
 
-      runBtn.disabled = false;
-      runBtn.textContent = 'Search';
+let data, error;
 
-      if (error) { showError(error.message || 'Unknown error'); console.error(error); return; }
+if (selectedCores.length <= 1) {
+  // Single core (or none): keep the simple function
+  const singleCore = selectedCores.length === 1 ? selectedCores[0] : null;
+  ({ data, error } = await client.rpc('search_samples', {
+    p_core_id:   toNull(singleCore),
+    p_min_depth: rpcMin,
+    p_max_depth: rpcMax,
+    p_status:    rpcStatus
+  }));
+} else {
+  // Multi-core: let SQL do the filtering with text[]
+  ({ data, error } = await client.rpc('search_samples_multi', {
+    p_core_ids:  selectedCores,  // ← array!
+    p_min_depth: rpcMin,
+    p_max_depth: rpcMax,
+    p_status:    rpcStatus
+  }));
+}
 
-      const filtered = Array.isArray(data)
-        ? data.filter(r => overlaps(r, minDepth, maxDepth))
-        : [];
+if (error) {
+  showError(error.message || 'Unknown error');
+  console.error('RPC error', error);
+  return;
+}
 
-      const filteredByCore = (selectedCores.length > 0)
-        ? filtered.filter(r => selectedCores.includes(r.core_id))
-        : filtered;
+// You can drop the extra client-side core filter now.
+// Keep the overlap helper if you want belt-and-suspenders, but SQL already enforces it.
+const results = Array.isArray(data) ? data : [];
+lastResults = results;
+countEl.textContent = `${results.length} result${results.length === 1 ? '' : 's'}`;
+renderRows(results);
 
-      lastResults = filteredByCore;
-      countEl.textContent = `${filteredByCore.length} result${filteredByCore.length === 1 ? '' : 's'}`;
-      renderRows(filteredByCore);
-    }
 
     // === Core codes cache + loader =======================================
     const CORE_CACHE_KEY = 'coreCodes:v2';
