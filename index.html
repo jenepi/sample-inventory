@@ -29,7 +29,6 @@
     .grid { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: var(--gap); }
     .grid > div { display: flex; flex-direction: column; }
 
-    /* make the Core ID column span 2 grid columns for breathing room */
     .col-span-2 { grid-column: span 2; }
 
     label { font-size: 12px; color: #475569; margin-bottom: 6px; letter-spacing: .2px; }
@@ -43,25 +42,22 @@
     }
 
     select { min-width: 220px; }
-    #coreId { width: 100%; min-height: 8.5em;}              /* core list fills its column */
-    select[multiple] { min-width: 260px; } /* a bit wider when multi */
+    #coreId { width: 100%; min-height: 8.5em; }
+    select[multiple] { min-width: 260px; }
 
     input::placeholder { color: #94a3b8; }
 
     .actions { display: flex; gap: var(--gap); align-items: center; }
 
     .btn { cursor: pointer; font-weight: 600; transition: background .15s, color .15s, border-color .15s; }
-
     .btn-primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
     .btn-primary:hover { background: #1d4ed8; }
-
     .btn-ghost { background: #f1f5f9; border-color: #e2e8f0; color: #334155; }
     .btn-ghost:hover { background: #e2e8f0; }
 
     .muted { color: #64748b; font-size: 13px; }
 
     table { width: 100%; border-collapse: collapse; }
-
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
     th { position: sticky; top: 0; background: #f1f5f9; z-index: 1; }
 
@@ -76,7 +72,6 @@
     .ok { display: none; }
     .sr { position: absolute; left: -9999px; }
 
-    /* neat row for the core controls under the list */
     .core-controls { display:flex; gap:6px; flex-wrap:wrap; margin-top: 6px; }
     .core-controls .btn { padding: 6px 10px; }
   </style>
@@ -88,23 +83,16 @@
     <div class="card" style="margin-bottom:16px;">
       <form id="searchForm">
         <div class="grid">
-          <!-- Core ID now spans 2 columns and stacks nicely -->
           <div class="col-span-2">
-  <label for="coreId">Core ID <span id="coreCountBadge" class="pill" style="margin-left:6px;">—</span></label>
-
-  <!-- Always-on multiselect -->
-  <select id="coreId" name="coreId" multiple>
-    <!-- options injected by JS -->
-  </select>
-
-  <div class="core-controls">
-    <button id="coreSelectAllBtn" class="btn btn-ghost" type="button" title="Select all cores">All</button>
-    <button id="coreClearBtn" class="btn btn-ghost" type="button" title="Clear selection">Clear</button>
-    <button id="coreRefreshBtn" class="btn btn-ghost" type="button" title="Refresh core list">↻</button>
-    <span class="muted" style="margin-left:6px;">Tip: hold Cmd/Ctrl to select multiple.</span>
-  </div>
-</div>
-
+            <label for="coreId">Core ID <span id="coreCountBadge" class="pill" style="margin-left:6px;">—</span></label>
+            <select id="coreId" name="coreId" multiple></select>
+            <div class="core-controls">
+              <button id="coreSelectAllBtn" class="btn btn-ghost" type="button" title="Select all cores">All</button>
+              <button id="coreClearBtn" class="btn btn-ghost" type="button" title="Clear selection">Clear</button>
+              <button id="coreRefreshBtn" class="btn btn-ghost" type="button" title="Refresh core list">↻</button>
+              <span class="muted" style="margin-left:6px;">Tip: hold Cmd/Ctrl to select multiple.</span>
+            </div>
+          </div>
 
           <div>
             <label for="minDepth">Min depth (m)</label>
@@ -165,7 +153,8 @@
     // === 1) CONFIG =========================================================
     const SUPABASE_URL = 'https://qkmxlmpotcsfxroxbnir.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFrbXhsbXBvdGNzZnhyb3hibmlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2NjUwMjUsImV4cCI6MjA3NDI0MTAyNX0.v3_MMFUjsGZUd5qgUX0k31xCz0Syi9syEnY_C-QZouU';
-    const RPC_FUNCTION = 'search_samples';
+    const RPC_SINGLE = 'search_samples';
+    const RPC_MULTI  = 'search_samples_multi';
     // ======================================================================
 
     const client   = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -186,7 +175,6 @@
     const coreCountBadge    = document.getElementById('coreCountBadge');
 
     let lastResults = [];
-    let isMulti = false; // UI state for core selector
 
     function showError(msg){ errEl.textContent = msg; errEl.style.display = 'block'; }
     function clearError(){ errEl.textContent = ''; errEl.style.display = 'none'; }
@@ -215,14 +203,14 @@
               ${esc(r.core_id)}
             </button>
           </td>
-          <td>${esc(r.section_number)}</td>
-          <td>${r.top_depth_m ?? ''}</td>
-          <td>${r.bottom_depth_m ?? ''}</td>
-          <td>${r.length_m ?? ''}</td>
-          <td>${r.remaining_m ?? ''}</td>
-          <td>${r.has_subsamples ? 'Yes' : 'No'}</td>
-          <td>${esc(r.status ?? '')}</td>
-          <td>${esc(r.notes ?? '')}</td>
+            <td>${esc(r.section_number)}</td>
+            <td>${r.top_depth_m ?? ''}</td>
+            <td>${r.bottom_depth_m ?? ''}</td>
+            <td>${r.length_m ?? ''}</td>
+            <td>${r.remaining_m ?? ''}</td>
+            <td>${r.has_subsamples ? 'Yes' : 'No'}</td>
+            <td>${esc(r.status ?? '')}</td>
+            <td>${esc(r.notes ?? '')}</td>
         `;
         tbody.appendChild(tr);
       }
@@ -280,55 +268,64 @@
       runBtn.disabled = true;
       runBtn.textContent = 'Searching…';
 
-      const toNullOrNumber = (v) => {
-        const x = (v ?? '').trim();
-        if (x === '') return null;
-        const n = Number(x);
+      // Parse inputs
+      const parseNum = (v) => {
+        const t = (v ?? '').trim();
+        if (t === '') return null;
+        const n = Number(t);
         return Number.isFinite(n) ? n : null;
       };
+      const minDepth = parseNum(document.getElementById('minDepth').value);
+      const maxDepth = parseNum(document.getElementById('maxDepth').value);
+      const rawStatus = document.getElementById('status').value;
+      const status = rawStatus === '' ? null : rawStatus;
 
-     const selectedCores = getSelectedCores();
-const toNull = v => (v === undefined || v === '' ? null : v);
+      const selectedCores = getSelectedCores();
+      const toNull = v => (v === undefined || v === '' ? null : v);
 
-// Normalize status/min/max
-const rpcMin = (minDepth ?? null);
-const rpcMax = (maxDepth ?? null);
-const rpcStatus = (status ?? null);
+      const rpcMin = (minDepth ?? null);
+      const rpcMax = (maxDepth ?? null);
+      const rpcStatus = (status ?? null);
 
-let data, error;
+      let data, error;
 
-if (selectedCores.length <= 1) {
-  // Single core (or none): keep the simple function
-  const singleCore = selectedCores.length === 1 ? selectedCores[0] : null;
-  ({ data, error } = await client.rpc('search_samples', {
-    p_core_id:   toNull(singleCore),
-    p_min_depth: rpcMin,
-    p_max_depth: rpcMax,
-    p_status:    rpcStatus
-  }));
-} else {
-  // Multi-core: let SQL do the filtering with text[]
-  ({ data, error } = await client.rpc('search_samples_multi', {
-    p_core_ids:  selectedCores,  // ← array!
-    p_min_depth: rpcMin,
-    p_max_depth: rpcMax,
-    p_status:    rpcStatus
-  }));
-}
+      if (selectedCores.length <= 1) {
+        // 0 or 1 core: single RPC
+        const singleCore = selectedCores.length === 1 ? selectedCores[0] : null;
+        ({ data, error } = await client.rpc(RPC_SINGLE, {
+          p_core_id:   toNull(singleCore),
+          p_min_depth: rpcMin,
+          p_max_depth: rpcMax,
+          p_status:    rpcStatus
+        }));
+      } else {
+        // Multi-core: array RPC
+        ({ data, error } = await client.rpc(RPC_MULTI, {
+          p_core_ids:  selectedCores,
+          p_min_depth: rpcMin,
+          p_max_depth: rpcMax,
+          p_status:    rpcStatus
+        }));
+      }
 
-if (error) {
-  showError(error.message || 'Unknown error');
-  console.error('RPC error', error);
-  return;
-}
+      runBtn.disabled = false;
+      runBtn.textContent = 'Search';
 
-// You can drop the extra client-side core filter now.
-// Keep the overlap helper if you want belt-and-suspenders, but SQL already enforces it.
-const results = Array.isArray(data) ? data : [];
-lastResults = results;
-countEl.textContent = `${results.length} result${results.length === 1 ? '' : 's'}`;
-renderRows(results);
+      if (error) {
+        showError(error.message || 'Unknown error');
+        console.error('RPC error', error);
+        return;
+      }
 
+      // SQL already enforced depth+core filters; keep client overlap for safety if desired:
+      const results = Array.isArray(data)
+        ? data.filter(r => overlaps(r, minDepth, maxDepth))
+        : [];
+
+      lastResults = results;
+      countEl.textContent = `${results.length} result${results.length === 1 ? '' : 's'}`;
+      renderRows(results);
+    } // <— end runSearch
 
     // === Core codes cache + loader =======================================
     const CORE_CACHE_KEY = 'coreCodes:v2';
@@ -351,28 +348,21 @@ renderRows(results);
     }
 
     function fillCoreSelect(codes) {
-  const prev = new Set(getSelectedCores());
-
-  // Always multi: no (All cores) sentinel option
-  coreSelect.innerHTML = '';
-  for (const code of codes) {
-    const opt = document.createElement('option');
-    opt.value = code;
-    opt.textContent = code;
-    if (prev.has(code)) opt.selected = true;
-    coreSelect.appendChild(opt);
-  }
-
-  // Ensure multi-select sizing
-  coreSelect.multiple = true;
-  // show 6–10 rows depending on length
-  const rows = Math.max(6, Math.min(10, coreSelect.options.length));
-  coreSelect.size = rows;
-
-  coreSelect.disabled = false;
-  if (coreCountBadge) coreCountBadge.textContent = codes.length;
-}
-
+      const prev = new Set(getSelectedCores());
+      coreSelect.innerHTML = '';
+      for (const code of codes) {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = code;
+        if (prev.has(code)) opt.selected = true;
+        coreSelect.appendChild(opt);
+      }
+      // size 6–10 rows depending on list length
+      coreSelect.multiple = true;
+      coreSelect.size = Math.max(6, Math.min(10, coreSelect.options.length));
+      coreSelect.disabled = false;
+      if (coreCountBadge) coreCountBadge.textContent = codes.length;
+    }
 
     async function fetchCoreCodesNetwork() {
       // Strategy 1: public view
@@ -427,21 +417,17 @@ renderRows(results);
       }
     }
 
-    function ensureCoreSelect() {
-      if (!coreSelect) return;
-    }
-
     // ---------- Modal wiring ----------
     function $id(id){ return document.getElementById(id); }
     function openDetail(){ const m=$id('detailModal'); if (m) m.style.display='flex'; }
     function closeDetail(){ const m=$id('detailModal'); if (m) m.style.display='none'; }
 
-  document.addEventListener('DOMContentLoaded', async () => {
-  await populateCoreDropdown();
-  // make sure it's multi (in case of race)
-  coreSelect.multiple = true;
-});
-
+    document.addEventListener('DOMContentLoaded', () => {
+      const modal   = $id('detailModal');
+      const closeBn = $id('detailClose');
+      if (modal)   modal.addEventListener('click', (e) => { if (e.target === modal) closeDetail(); });
+      if (closeBn) closeBn.addEventListener('click', closeDetail);
+    });
 
     // Delegate clicks for Record ID and Core ID buttons
     tbody.addEventListener('click', async (e) => {
@@ -451,7 +437,6 @@ renderRows(results);
         await showSampleDetail(recordId);
         return;
       }
-
       const coreBtn = e.target.closest('[data-core-id]');
       if (coreBtn) {
         const coreCode = coreBtn.getAttribute('data-core-id');
@@ -550,11 +535,10 @@ renderRows(results);
           </div>
         </div>
       `;
-
       if (body) body.innerHTML = sampleTable;
     }
 
-    // === Core metadata modal (RPC + formatting) ===========================
+    // === Core metadata modal =============================================
     async function showCoreDetail(coreCode) {
       const title = $id('detailTitle');
       const body  = $id('detailBody');
@@ -566,7 +550,7 @@ renderRows(results);
       try {
         const resp = await client.rpc('get_core_detail', { p_core_code: coreCode });
         error = resp.error || null;
-        data  = Array.isArray(resp.data) ? resp.data[0] : null; // single row
+        data  = Array.isArray(resp.data) ? resp.data[0] : null;
       } catch (e) {
         error = e;
       }
@@ -598,9 +582,7 @@ renderRows(results);
 
       function fmtVal(key, val) {
         if (val == null || val === '') return '';
-        if (key === 'oldest_age' && !isNaN(val)) {
-          return Number(val).toLocaleString('en-US');
-        }
+        if (key === 'oldest_age' && !isNaN(val)) return Number(val).toLocaleString('en-US');
         return val;
       }
 
@@ -636,7 +618,6 @@ renderRows(results);
           </div>
         </div>
       `;
-
       if (body) body.innerHTML = html;
     }
 
@@ -655,31 +636,29 @@ renderRows(results);
     csvBtn.addEventListener('click', () => downloadCSV(lastResults));
 
     coreSelectAllBtn.addEventListener('click', (e) => {
-  e.preventDefault();
-  for (const opt of coreSelect.options) opt.selected = true;
-});
+      e.preventDefault();
+      for (const opt of coreSelect.options) opt.selected = true;
+    });
 
-coreClearBtn.addEventListener('click', (e) => {
-  e.preventDefault();
-  for (const opt of coreSelect.options) opt.selected = false;
-});
+    coreClearBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      for (const opt of coreSelect.options) opt.selected = false;
+    });
 
-coreRefreshBtn.addEventListener('click', async (e) => {
-  e.preventDefault();
-  const b = coreRefreshBtn;
-  b.textContent = '…';
-  b.disabled = true;
-  localStorage.removeItem(CORE_CACHE_KEY);
-  await populateCoreDropdown();
-  b.textContent = '↻';
-  b.disabled = false;
-});
-
+    coreRefreshBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const b = coreRefreshBtn;
+      b.textContent = '…';
+      b.disabled = true;
+      localStorage.removeItem(CORE_CACHE_KEY);
+      await populateCoreDropdown();
+      b.textContent = '↻';
+      b.disabled = false;
+    });
 
     document.addEventListener('DOMContentLoaded', async () => {
-      ensureCoreSelect();
       await populateCoreDropdown();
-      setMultiMode(false); // start as normal dropdown
+      coreSelect.multiple = true; // ensure mode
     });
   </script>
 
@@ -692,6 +671,5 @@ coreRefreshBtn.addEventListener('click', async (e) => {
       <div id="detailBody" class="muted">Loading…</div>
     </div>
   </div>
-
 </body>
 </html>
