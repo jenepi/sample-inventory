@@ -4,6 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>COLDEX Sample Finder</title>
+  <!-- Static non-editable instruction header -->
+<div class="card app-header">
+  <p><strong>How to use:</strong>
+    Select one or more core IDs (hold Cmd/Ctrl to select multiple).
+    Optionally set depth filters and choose a sample status.
+    Click <strong>Search</strong> to view matching results,
+    or <strong>Download CSV</strong> to export your data.
+  </p>
+</div>
   <style>
     :root { --gap: 10px; --pad: 12px; --radius: 12px; }
 
@@ -25,6 +34,18 @@
       padding: var(--pad);
       box-shadow: 0 4px 10px rgba(0,0,0,.05);
     }
+
+    /* --- Instruction header styling --- */
+.app-header {
+  margin-bottom: 16px;
+  font-size: 15px;
+  color: #334155;
+  line-height: 1.5;
+}
+.app-header strong {
+  color: #1e3a8a;
+}
+
 
     .grid { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: var(--gap); }
     .grid > div { display: flex; flex-direction: column; }
