@@ -162,7 +162,6 @@
             <th>Top (m)</th>
             <th>Bottom (m)</th>
             <th>Length (m)</th>
-            <th>Remaining (m)</th>
             <th>Subsampled?</th>
             <th>Status</th>
             <th>Notes</th>
@@ -233,7 +232,6 @@
             <td>${r.top_depth_m ?? ''}</td>
             <td>${r.bottom_depth_m ?? ''}</td>
             <td>${r.length_m ?? ''}</td>
-            <td>${r.remaining_m ?? ''}</td>
             <td>${r.has_subsamples ? 'Yes' : 'No'}</td>
             <td>${esc(r.status ?? '')}</td>
             <td>${esc(r.notes ?? '')}</td>
@@ -245,7 +243,7 @@
     function toCSV(rows) {
       const cols = [
         'record_id','core_id','section_number','top_depth_m','bottom_depth_m',
-        'length_m','remaining_m','has_subsamples','subsample_count','status','notes'
+        'length_m','has_subsamples','subsample_count','status','notes'
       ];
       const header = cols.join(',');
       const lines = rows.map(r =>
@@ -550,7 +548,6 @@
               <tr><th>Top (m)</th><td>${row.top_depth_m ?? ''}</td></tr>
               <tr><th>Bottom (m)</th><td>${row.bottom_depth_m ?? ''}</td></tr>
               <tr><th>Length (m)</th><td>${row.length_m ?? ''}</td></tr>
-              <tr><th>Remaining (m)</th><td>${row.remaining_m ?? ''}</td></tr>
               <tr><th>Status</th><td>${esc(row.status ?? '')}</td></tr>
               <tr><th>Notes</th><td>${esc(row.notes ?? '')}</td></tr>
             </table>
